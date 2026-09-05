@@ -1,0 +1,40 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Compile & Upload (Seeed XIAO nRF52840)",
+      "type": "shell",
+      "command": "${workspaceFolder}/upload.bat",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Open Serial Monitor",
+      "type": "shell",
+      "command": "${workspaceFolder}/monitor.bat",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Compile Only",
+      "type": "shell",
+      "command": "\"C:\\Program Files\\Arduino IDE\\resources\\app\\lib\\backend\\resources\\arduino-cli.exe\" compile --fqbn Seeeduino:nrf52:xiaonRF52840Sense .",
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}
