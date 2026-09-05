@@ -29,6 +29,29 @@ constexpr unsigned long SERIAL_BAUD_RATE = 115200;
 constexpr unsigned long TELEMETRY_INTERVAL_MS = 3000;
 
 // =============================================================================
+// BLE (BLUETOOTH LOW ENERGY) CONFIGURATION
+// =============================================================================
+
+/// BLE Advertised Device Name
+#define BLE_DEVICE_NAME "CO2-Health-Monitor"
+
+/// Manufacturer & Model strings for Device Information Service (DIS)
+#define BLE_MANUFACTURER_STR "Seeed XIAO"
+#define BLE_MODEL_STR        "nRF52840-CO2-Health"
+
+/// Transmit power in dBm (+4 dBm gives max range while remaining low power)
+constexpr int8_t BLE_TX_POWER_DBM = 4;
+
+/// Advertising interval fast (in 0.625ms units: 32 = 20ms)
+constexpr uint16_t BLE_ADV_FAST_INTERVAL = 32;
+
+/// Advertising interval slow (in 0.625ms units: 244 = 152.5ms)
+constexpr uint16_t BLE_ADV_SLOW_INTERVAL = 244;
+
+/// Fast advertising timeout in seconds
+constexpr uint16_t BLE_ADV_FAST_TIMEOUT_S = 30;
+
+// =============================================================================
 // SENSOR I2C ADDRESSES
 // =============================================================================
 

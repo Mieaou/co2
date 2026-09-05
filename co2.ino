@@ -21,6 +21,7 @@
 #include "dsp_filters.h"
 #include "sensor_climate.h"
 #include "sensor_ppg.h"
+#include "ble_manager.h"
 
 // =============================================================================
 // GLOBAL MANAGERS
@@ -28,6 +29,7 @@
 
 ClimateSensorManager climate;
 PpgSensorManager ppg;
+BleManager ble;
 
 unsigned long lastTelemetryMs = 0;
 bool outputJson = OUTPUT_JSON;
@@ -37,116 +39,116 @@ bool outputJson = OUTPUT_JSON;
 // =============================================================================
 
 /**
- * @brief Outputs a single-line, RFC-compliant JSON object for automated loggers.
+ * @brief Streams a single-line, RFC-compliant JSON object to any Arduino Print stream.
  */
-void printJsonTelemetry() {
+void formatJsonTelemetry(Print& out) {
   const ClimateData& c = climate.getData();
   const BiometricData& b = ppg.getData();
   const SensorHealth& h = climate.getHealth();
 
-  Serial.print(F("{\"time_ms\":")); Serial.print(millis());
+  out.print(F("{\"time_ms\":")); out.print(millis());
   
   // Climate telemetry
-  Serial.print(F(",\"co2_ppm\":")); Serial.print(c.co2_ppm);
-  Serial.print(F(",\"co2_status\":\"")); Serial.print(c.co2_status); Serial.print(F("\""));
-  Serial.print(F(",\"co2_warming_up\":")); Serial.print(c.is_warming_up ? F("true") : F("false"));
-  Serial.print(F(",\"temp_c\":")); Serial.print(c.temp_c, 1);
-  Serial.print(F(",\"temp_bmp_c\":")); Serial.print(c.temp_bmp_c, 1);
-  Serial.print(F(",\"humidity_pct\":")); Serial.print(c.humidity_pct, 1);
-  Serial.print(F(",\"dew_point_c\":")); Serial.print(c.dew_point_c, 1);
-  Serial.print(F(",\"abs_humidity_gm3\":")); Serial.print(c.abs_humidity_gm3, 1);
-  Serial.print(F(",\"pressure_hpa\":")); Serial.print(c.pressure_hpa, 1);
-  Serial.print(F(",\"pressure_mmhg\":")); Serial.print(c.pressure_mmhg, 1);
-  Serial.print(F(",\"altitude_m\":")); Serial.print(c.altitude_m, 1);
-  Serial.print(F(",\"rel_altitude_m\":")); Serial.print(c.relative_altitude_m, 2);
+  out.print(F(",\"co2_ppm\":")); out.print(c.co2_ppm);
+  out.print(F(",\"co2_status\":\"")); out.print(c.co2_status); out.print(F("\""));
+  out.print(F(",\"co2_warming_up\":")); out.print(c.is_warming_up ? F("true") : F("false"));
+  out.print(F(",\"temp_c\":")); out.print(c.temp_c, 1);
+  out.print(F(",\"temp_bmp_c\":")); out.print(c.temp_bmp_c, 1);
+  out.print(F(",\"humidity_pct\":")); out.print(c.humidity_pct, 1);
+  out.print(F(",\"dew_point_c\":")); out.print(c.dew_point_c, 1);
+  out.print(F(",\"abs_humidity_gm3\":")); out.print(c.abs_humidity_gm3, 1);
+  out.print(F(",\"pressure_hpa\":")); out.print(c.pressure_hpa, 1);
+  out.print(F(",\"pressure_mmhg\":")); out.print(c.pressure_mmhg, 1);
+  out.print(F(",\"altitude_m\":")); out.print(c.altitude_m, 1);
+  out.print(F(",\"rel_altitude_m\":")); out.print(c.relative_altitude_m, 2);
 
   // Biometric telemetry
-  Serial.print(F(",\"finger_detected\":")); Serial.print(b.finger_detected ? F("true") : F("false"));
-  Serial.print(F(",\"ppg_state\":")); Serial.print(static_cast<int>(b.state));
-  Serial.print(F(",\"buffer_pct\":")); Serial.print(b.buffer_progress_pct);
-  Serial.print(F(",\"hr_bpm\":"));
-  if (b.hr_valid) Serial.print(b.hr_bpm); else Serial.print(F("null"));
-  Serial.print(F(",\"hr_bpm_raw\":"));
-  if (b.hr_bpm_raw > 0) Serial.print(b.hr_bpm_raw); else Serial.print(F("null"));
-  Serial.print(F(",\"hr_valid\":")); Serial.print(b.hr_valid ? F("true") : F("false"));
-  Serial.print(F(",\"spo2_pct\":"));
-  if (b.spo2_valid) Serial.print(b.spo2); else Serial.print(F("null"));
-  Serial.print(F(",\"spo2_raw\":"));
-  if (b.spo2_raw > 0) Serial.print(b.spo2_raw); else Serial.print(F("null"));
-  Serial.print(F(",\"spo2_valid\":")); Serial.print(b.spo2_valid ? F("true") : F("false"));
-  Serial.print(F(",\"perfusion_index\":")); Serial.print(b.perfusion_index, 2);
-  Serial.print(F(",\"led_brightness\":")); Serial.print(b.led_brightness);
+  out.print(F(",\"finger_detected\":")); out.print(b.finger_detected ? F("true") : F("false"));
+  out.print(F(",\"ppg_state\":")); out.print(static_cast<int>(b.state));
+  out.print(F(",\"buffer_pct\":")); out.print(b.buffer_progress_pct);
+  out.print(F(",\"hr_bpm\":"));
+  if (b.hr_valid) out.print(b.hr_bpm); else out.print(F("null"));
+  out.print(F(",\"hr_bpm_raw\":"));
+  if (b.hr_bpm_raw > 0) out.print(b.hr_bpm_raw); else out.print(F("null"));
+  out.print(F(",\"hr_valid\":")); out.print(b.hr_valid ? F("true") : F("false"));
+  out.print(F(",\"spo2_pct\":"));
+  if (b.spo2_valid) out.print(b.spo2); else out.print(F("null"));
+  out.print(F(",\"spo2_raw\":"));
+  if (b.spo2_raw > 0) out.print(b.spo2_raw); else out.print(F("null"));
+  out.print(F(",\"spo2_valid\":")); out.print(b.spo2_valid ? F("true") : F("false"));
+  out.print(F(",\"perfusion_index\":")); out.print(b.perfusion_index, 2);
+  out.print(F(",\"led_brightness\":")); out.print(b.led_brightness);
 
   // Hardware diagnostics
-  Serial.print(F(",\"bmp_ok\":")); Serial.print(h.bmp388_online ? F("true") : F("false"));
-  Serial.print(F(",\"scd_ok\":")); Serial.print(h.scd41_online ? F("true") : F("false"));
-  Serial.print(F(",\"max_ok\":")); Serial.print(ppg.isOnline() ? F("true") : F("false"));
-  Serial.println(F("}"));
+  out.print(F(",\"bmp_ok\":")); out.print(h.bmp388_online ? F("true") : F("false"));
+  out.print(F(",\"scd_ok\":")); out.print(h.scd41_online ? F("true") : F("false"));
+  out.print(F(",\"max_ok\":")); out.print(ppg.isOnline() ? F("true") : F("false"));
+  out.println(F("}"));
 }
 
 /**
- * @brief Outputs a formatted visual text dashboard for the Arduino Serial Monitor.
+ * @brief Outputs a formatted visual text dashboard for Serial Monitor or BLE.
  */
-void printDashboardTelemetry() {
+void printDashboardTelemetry(Print& out = Serial) {
   const ClimateData& c = climate.getData();
   const BiometricData& b = ppg.getData();
 
-  Serial.println(F("\n=================================================="));
-  Serial.print(F("[UPTIME: ")); Serial.print(millis() / 1000); Serial.println(F(" s]"));
+  out.println(F("\n=================================================="));
+  out.print(F("[UPTIME: ")); out.print(millis() / 1000); out.println(F(" s]"));
   
-  Serial.println(F("--- [CLIMATE] Sensirion SCD41 + Bosch BMP388 ---"));
-  Serial.print(F("  CO2:            ")); Serial.print(c.co2_ppm); Serial.print(F(" ppm [")); Serial.print(c.co2_status); Serial.println(F("]"));
-  Serial.print(F("  Temperature:    ")); Serial.print(c.temp_c, 1); Serial.print(F(" °C  (BMP388 Ref: ")); Serial.print(c.temp_bmp_c, 1); Serial.println(F(" °C)"));
-  Serial.print(F("  Humidity:       ")); Serial.print(c.humidity_pct, 1); Serial.println(F(" %"));
-  Serial.print(F("  Dew Point:      ")); Serial.print(c.dew_point_c, 1); Serial.println(F(" °C"));
-  Serial.print(F("  Abs. Humidity:  ")); Serial.print(c.abs_humidity_gm3, 1); Serial.println(F(" g/m³"));
-  Serial.print(F("  Pressure:       ")); Serial.print(c.pressure_mmhg, 1); Serial.print(F(" mmHg (")); Serial.print(c.pressure_hpa, 1); Serial.println(F(" hPa)"));
-  Serial.print(F("  Altitude (ISA): ")); Serial.print(c.altitude_m, 1); Serial.print(F(" m  (Delta: ")); Serial.print(c.relative_altitude_m, 2); Serial.println(F(" m)"));
+  out.println(F("--- [CLIMATE] Sensirion SCD41 + Bosch BMP388 ---"));
+  out.print(F("  CO2:            ")); out.print(c.co2_ppm); out.print(F(" ppm [")); out.print(c.co2_status); out.println(F("]"));
+  out.print(F("  Temperature:    ")); out.print(c.temp_c, 1); out.print(F(" °C  (BMP388 Ref: ")); out.print(c.temp_bmp_c, 1); out.println(F(" °C)"));
+  out.print(F("  Humidity:       ")); out.print(c.humidity_pct, 1); out.println(F(" %"));
+  out.print(F("  Dew Point:      ")); out.print(c.dew_point_c, 1); out.println(F(" °C"));
+  out.print(F("  Abs. Humidity:  ")); out.print(c.abs_humidity_gm3, 1); out.println(F(" g/m³"));
+  out.print(F("  Pressure:       ")); out.print(c.pressure_mmhg, 1); out.print(F(" mmHg (")); out.print(c.pressure_hpa, 1); out.println(F(" hPa)"));
+  out.print(F("  Altitude (ISA): ")); out.print(c.altitude_m, 1); out.print(F(" m  (Delta: ")); out.print(c.relative_altitude_m, 2); out.println(F(" m)"));
 
-  Serial.println(F("--- [BIOMETRICS] Maxim MAX30101 (AGC + DSP) ---"));
-  Serial.print(F("  Finger Contact: ")); Serial.println(b.finger_detected ? F("YES") : F("NO"));
-  Serial.print(F("  Subsystem State:"));
+  out.println(F("--- [BIOMETRICS] Maxim MAX30101 (AGC + DSP) ---"));
+  out.print(F("  Finger Contact: ")); out.println(b.finger_detected ? F("YES") : F("NO"));
+  out.print(F("  Subsystem State:"));
   switch (b.state) {
-    case PPG_STATE_NO_FINGER:    Serial.println(F("No Finger Detected")); break;
-    case PPG_STATE_CALIBRATING:  Serial.println(F("Calibrating AGC Gain...")); break;
-    case PPG_STATE_ACQUIRING:    Serial.print(F("Acquiring 4s Buffer (")); 
-                                 Serial.print(b.buffer_progress_pct); Serial.println(F("%)")); break;
-    case PPG_STATE_TRACKING:     Serial.println(F("Tracking (Active)")); break;
+    case PPG_STATE_NO_FINGER:    out.println(F("No Finger Detected")); break;
+    case PPG_STATE_CALIBRATING:  out.println(F("Calibrating AGC Gain...")); break;
+    case PPG_STATE_ACQUIRING:    out.print(F("Acquiring 4s Buffer (")); 
+                                 out.print(b.buffer_progress_pct); out.println(F("%)")); break;
+    case PPG_STATE_TRACKING:     out.println(F("Tracking (Active)")); break;
   }
 
-  Serial.print(F("  Heart Rate:     "));
+  out.print(F("  Heart Rate:     "));
   if (b.hr_valid) {
-    Serial.print(b.hr_bpm); Serial.println(F(" BPM (Filtered)"));
+    out.print(b.hr_bpm); out.println(F(" BPM (Filtered)"));
   } else {
     if (b.state == PPG_STATE_CALIBRATING) {
-      Serial.println(F("Calibrating AGC..."));
+      out.println(F("Calibrating AGC..."));
     } else if (b.state == PPG_STATE_ACQUIRING) {
-      Serial.print(F("Acquiring (")); Serial.print(b.buffer_progress_pct); Serial.println(F("%)..."));
+      out.print(F("Acquiring (")); out.print(b.buffer_progress_pct); out.println(F("%)..."));
     } else if (b.state == PPG_STATE_TRACKING) {
-      Serial.println(F("Analyzing..."));
+      out.println(F("Analyzing..."));
     } else {
-      Serial.println(F("--"));
+      out.println(F("--"));
     }
   }
 
-  Serial.print(F("  SpO2:           "));
+  out.print(F("  SpO2:           "));
   if (b.spo2_valid) {
-    Serial.print(b.spo2); Serial.println(F(" %"));
+    out.print(b.spo2); out.println(F(" %"));
   } else {
     if (b.state == PPG_STATE_CALIBRATING) {
-      Serial.println(F("Calibrating AGC..."));
+      out.println(F("Calibrating AGC..."));
     } else if (b.state == PPG_STATE_ACQUIRING) {
-      Serial.print(F("Acquiring (")); Serial.print(b.buffer_progress_pct); Serial.println(F("%)..."));
+      out.print(F("Acquiring (")); out.print(b.buffer_progress_pct); out.println(F("%)..."));
     } else if (b.state == PPG_STATE_TRACKING) {
-      Serial.println(F("Analyzing..."));
+      out.println(F("Analyzing..."));
     } else {
-      Serial.println(F("--"));
+      out.println(F("--"));
     }
   }
 
-  Serial.print(F("  Perfusion Index:")); Serial.print(b.perfusion_index, 2); Serial.println(F(" %"));
-  Serial.print(F("  AGC Drive:      ")); Serial.print(b.led_brightness); Serial.println(F(" / 255"));
-  Serial.println(F("=================================================="));
+  out.print(F("  Perfusion Index:")); out.print(b.perfusion_index, 2); out.println(F(" %"));
+  out.print(F("  AGC Drive:      ")); out.print(b.led_brightness); out.println(F(" / 255"));
+  out.println(F("=================================================="));
 }
 
 // =============================================================================
@@ -287,6 +289,9 @@ void setup() {
   // 5. Initialize biometric subsystem
   ppg.begin(Wire, maxPresent);
 
+  // 6. Initialize Bluetooth Low Energy subsystem
+  ble.begin(BLE_DEVICE_NAME);
+
   // Turn off Blue LED
   digitalWrite(LED_BLUE, HIGH);
 
@@ -303,8 +308,40 @@ void setup() {
     Serial.println(scdPresent ? F("ONLINE (0x62)") : F("OFFLINE / NOT FOUND"));
     Serial.print(F("  MAX30101: "));
     Serial.println(maxPresent ? F("ONLINE (0x57)") : F("OFFLINE / NOT FOUND"));
+    Serial.print(F("  BLE:      ONLINE (")); Serial.print(F(BLE_DEVICE_NAME)); Serial.println(F(")"));
     Serial.println(F("--------------------------------------------------"));
     lastTelemetryMs = 0; // Force immediate telemetry packet
+  }
+}
+
+// =============================================================================
+// COMMAND PROCESSOR
+// =============================================================================
+
+/**
+ * @brief Unified command handler for Serial and BLE UART inputs.
+ */
+void handleCommand(char cmd, Print& out) {
+  if (cmd == 'j' || cmd == 'J') {
+    outputJson = true;
+    out.println(F("[*] Switched to JSON output"));
+    lastTelemetryMs = 0;
+  } else if (cmd == 'd' || cmd == 'D') {
+    outputJson = false;
+    out.println(F("[*] Switched to Visual Dashboard"));
+    lastTelemetryMs = 0;
+  } else if (cmd == 'r' || cmd == 'R') {
+    lastTelemetryMs = 0;
+  } else if (cmd == 'z' || cmd == 'Z') {
+    climate.resetRelativeAltitude();
+    out.println(F("[*] Relative altitude zeroed (tare 0.0 m)"));
+    lastTelemetryMs = 0;
+  } else if (cmd == 'b' || cmd == 'B') {
+    out.println(F("[*] Remote reboot commanded. Restarting MCU..."));
+    delay(150);
+    NVIC_SystemReset();
+  } else if (cmd == '?' || cmd == 'h' || cmd == 'H') {
+    out.println(F("\n[Commands] 'j'=JSON | 'd'=Dashboard | 'r'=Refresh | 'z'=Zero Alt | 'b'=Reboot"));
   }
 }
 
@@ -334,21 +371,15 @@ void loop() {
     wasSerialConnected = false;
   }
 
-  // 3. Serial command handler for dynamic mode switching ('j' = JSON, 'd' = Dashboard, 'r' = Refresh)
+  // 3. Command handlers for dynamic mode switching ('j' = JSON, 'd' = Dashboard, 'r' = Refresh)
   while (Serial.available() > 0) {
     char cmd = static_cast<char>(Serial.read());
-    if (cmd == 'j' || cmd == 'J') {
-      outputJson = true;
-      lastTelemetryMs = 0; // Trigger immediate JSON packet without plain text banner
-    } else if (cmd == 'd' || cmd == 'D') {
-      outputJson = false;
-      Serial.println(F("[*] Switched to Visual Dashboard"));
-      lastTelemetryMs = 0;
-    } else if (cmd == 'r' || cmd == 'R') {
-      lastTelemetryMs = 0;
-    } else if (cmd == '?' || cmd == 'h' || cmd == 'H') {
-      Serial.println(F("\n[Commands] 'j' = JSON | 'd' = Dashboard | 'r' = Send now"));
-    }
+    handleCommand(cmd, Serial);
+  }
+
+  while (ble.available() > 0) {
+    char cmd = static_cast<char>(ble.read());
+    handleCommand(cmd, ble.getUart());
   }
 
   // 4. Drain MAX30101 FIFO buffer and execute real-time PPG state machine
@@ -360,10 +391,18 @@ void loop() {
   // 6. Continuous periodic telemetry reporting
   if (now - lastTelemetryMs >= TELEMETRY_INTERVAL_MS) {
     lastTelemetryMs = now;
+    
+    // Output to USB Serial
     if (outputJson) {
-      printJsonTelemetry();
+      formatJsonTelemetry(Serial);
     } else {
-      printDashboardTelemetry();
+      printDashboardTelemetry(Serial);
+    }
+
+    // Output to BLE UART: stream structured JSON to connected mobile app / central
+    if (ble.isSubscribed()) {
+      formatJsonTelemetry(ble.getUart());
     }
   }
 }
+

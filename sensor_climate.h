@@ -35,6 +35,9 @@ public:
    */
   void update(unsigned long currentMillis);
 
+  /// Reset relative altitude reference baseline to current pressure (tare to 0.0m)
+  void resetRelativeAltitude();
+
   /// Get current aggregated climate data snapshot
   const ClimateData& getData() const { return data_; }
 

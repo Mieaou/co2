@@ -1,0 +1,21 @@
+{
+  "name": "AeroSense CO2 & Health Monitor",
+  "short_name": "AeroSense",
+  "description": "Wireless Environmental & Biometric Radar for Seeed XIAO nRF52840",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0b0f19",
+  "theme_color": "#0b0f19",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='42' fill='%230b0f19'/><circle cx='96' cy='96' r='72' stroke='%2310b981' stroke-width='10' fill='none'/><path d='M60 120 Q96 60 132 120' stroke='%2310b981' stroke-width='12' fill='none' stroke-linecap='round'/><circle cx='96' cy='74' r='12' fill='%2310b981'/></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='112' fill='%230b0f19'/><circle cx='256' cy='256' r='192' stroke='%2310b981' stroke-width='24' fill='none'/><path d='M160 320 Q256 160 352 320' stroke='%2310b981' stroke-width='32' fill='none' stroke-linecap='round'/><circle cx='256' cy='198' r='32' fill='%2310b981'/></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

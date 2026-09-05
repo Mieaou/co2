@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AeroSense — CO2 & Health Monitor</title>
+  
+  <!-- PWA Metadata -->
+  <meta name="theme-color" content="#0b0f19">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AeroSense">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%230b0f19' stroke='%2310b981' stroke-width='4'/><path d='M30 65 Q50 30 70 65' stroke='%2310b981' stroke-width='8' fill='none' stroke-linecap='round'/><circle cx='50' cy='38' r='7' fill='%2310b981'/></svg>">
+
+  <!-- Google Fonts: Outfit & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- App Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Ambient Lighting Elements -->
+  <div class="ambient-glow glow-top-left"></div>
+  <div class="ambient-glow glow-top-right"></div>
+  <div class="ambient-glow glow-center" id="ambientCenterGlow"></div>
+
+  <!-- App Container -->
+  <div class="app-container">
+
+    <!-- Header Navigation -->
+    <header class="app-header">
+      <div class="brand-group">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+          </svg>
+        </div>
+        <div class="brand-titles">
+          <h1 class="brand-title">AeroSense</h1>
+          <span class="brand-subtitle">Environmental & Biometric Radar</span>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <div class="connection-status-pill disconnected" id="connectionPill">
+          <span class="status-indicator"></span>
+          <span class="status-label" id="connectionLabel">Отключено</span>
+        </div>
+        <button class="btn btn-primary" id="btnConnect" title="Подключить по Bluetooth">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+            <path d="m7 7 10 10-5 5V2l5 5L7 17"/>
+          </svg>
+          <span id="btnConnectText">Подключить</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Bluetooth Unsupported / HTTPS Warning Notice -->
+    <div class="alert-banner hidden" id="httpsWarning">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <span>Для Web Bluetooth требуется безопасное соединение (HTTPS) или запуск через GitHub Pages.</span>
+    </div>
+
+    <!-- Quick Actions Bar -->
+    <section class="quick-actions-bar">
+      <button class="action-chip" id="btnZeroAltitude" title="Обнулить относительную высоту (Tare)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
+        </svg>
+        <span>Сброс высоты (0 м)</span>
+      </button>
+
+      <button class="action-chip" id="btnToggleAudio" title="Включить/выключить голосовое предупреждение">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="audioIcon">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/>
+        </svg>
+        <span id="audioLabel">Озвучка: Вкл</span>
+      </button>
+
+      <button class="action-chip" id="btnRefresh" title="Запросить немедленное обновление данных">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+        </svg>
+        <span>Обновить</span>
+      </button>
+
+      <button class="action-chip chip-danger" id="btnReboot" title="Перезагрузить микроконтроллер">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/>
+        </svg>
+        <span>Перезагрузка</span>
+      </button>
+
+      <button class="action-chip chip-demo" id="btnDemoMode" title="Запустить демо-поток данных без устройства">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        <span id="demoLabel">Демо-режим</span>
+      </button>
+    </section>
+
+    <!-- Main Hero: Radial CO2 Gauge -->
+    <section class="hero-gauge-section card-glass">
+      <div class="gauge-wrapper">
+        <svg class="gauge-svg" viewBox="0 0 240 240">
+          <defs>
+            <linearGradient id="co2Gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#10b981"/>
+              <stop offset="50%" stop-color="#f59e0b"/>
+              <stop offset="100%" stop-color="#ef4444"/>
+            </linearGradient>
+            <filter id="gaugeGlow">
+              <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+              <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+          </defs>
+          <!-- Background Track Arc (240 degrees) -->
+          <circle class="gauge-track" cx="120" cy="120" r="95" stroke-dasharray="398" stroke-dashoffset="0"/>
+          <!-- Active Progress Arc -->
+          <circle class="gauge-progress" id="co2GaugeArc" cx="120" cy="120" r="95" stroke-dasharray="398" stroke-dashoffset="398"/>
+        </svg>
+
+        <div class="gauge-content">
+          <span class="gauge-caption">УГЛЕКИСЛЫЙ ГАЗ (CO₂)</span>
+          <div class="gauge-number-wrapper">
+            <span class="gauge-value" id="valCo2">---</span>
+            <span class="gauge-unit">ppm</span>
+          </div>
+          <div class="co2-status-badge status-good" id="co2Badge">
+            <span class="status-dot"></span>
+            <span id="co2StatusText">Ожидание данных...</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="gauge-footer-stats">
+        <div class="stat-mini">
+          <span class="stat-mini-label">Норма</span>
+          <span class="stat-mini-val text-green">&lt; 800</span>
+        </div>
+        <div class="stat-mini">
+          <span class="stat-mini-label">Внимание</span>
+          <span class="stat-mini-val text-yellow">800–1200</span>
+        </div>
+        <div class="stat-mini">
+          <span class="stat-mini-label">Проветрить</span>
+          <span class="stat-mini-val text-orange">1200–1600</span>
+        </div>
+        <div class="stat-mini">
+          <span class="stat-mini-label">Опасно</span>
+          <span class="stat-mini-val text-red">&gt; 1600</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Climate Telemetry Grid -->
+    <section class="section-title-wrapper">
+      <h2 class="section-title">Микроклимат & Атмосфера</h2>
+      <span class="section-badge">Sensirion SCD41 + Bosch BMP388</span>
+    </section>
+
+    <div class="climate-grid">
+      
+      <!-- Temperature Card -->
+      <div class="telemetry-card card-glass">
+        <div class="card-header">
+          <div class="card-icon icon-temp">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+            </svg>
+          </div>
+          <span class="card-label">Температура</span>
+        </div>
+        <div class="card-body">
+          <div class="value-row">
+            <span class="metric-value" id="valTemp">--.-</span>
+            <span class="metric-unit">°C</span>
+          </div>
+          <div class="metric-subtext">
+            <span>Эталон (BMP388): </span>
+            <strong id="valTempBmp">--.- °C</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Humidity Card -->
+      <div class="telemetry-card card-glass">
+        <div class="card-header">
+          <div class="card-icon icon-hum">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+            </svg>
+          </div>
+          <span class="card-label">Влажность</span>
+        </div>
+        <div class="card-body">
+          <div class="value-row">
+            <span class="metric-value" id="valHum">--.-</span>
+            <span class="metric-unit">%</span>
+          </div>
+          <div class="metric-subtext">
+            <span>Абсолютная: </span>
+            <strong id="valAbsHum">--.- г/м³</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Barometric Pressure Card (mmHg prominent) -->
+      <div class="telemetry-card card-glass">
+        <div class="card-header">
+          <div class="card-icon icon-pressure">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="m14 14-4-4M12 6v2M18 12h-2M6 12h2M12 16v2"/>
+            </svg>
+          </div>
+          <span class="card-label">Атм. Давление</span>
+        </div>
+        <div class="card-body">
+          <div class="value-row">
+            <span class="metric-value" id="valPressureMmHg">---.-</span>
+            <span class="metric-unit">мм рт. ст.</span>
+          </div>
+          <div class="metric-subtext">
+            <span>Барометр: </span>
+            <strong id="valPressureHpa">----.- гПа</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Altitude Card -->
+      <div class="telemetry-card card-glass">
+        <div class="card-header">
+          <div class="card-icon icon-alt">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="m8 3 4 8 5-5 5 15H2L8 3z"/>
+            </svg>
+          </div>
+          <span class="card-label">Высота (ISA)</span>
+        </div>
+        <div class="card-body">
+          <div class="value-row">
+            <span class="metric-value" id="valAltitude">--.-</span>
+            <span class="metric-unit">м</span>
+          </div>
+          <div class="metric-subtext">
+            <span>Смещение (&Delta;): </span>
+            <strong id="valRelAltitude" class="text-highlight">+0.00 м</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dew Point Card -->
+      <div class="telemetry-card card-glass">
+        <div class="card-header">
+          <div class="card-icon icon-dew">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v2M4.93 4.93l1.41 1.41M2 12h2M4.93 19.07l1.41-1.41M12 22v-2M19.07 19.07l-1.41-1.41M22 12h-2M19.07 4.93l-1.41 1.41M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/>
+            </svg>
+          </div>
+          <span class="card-label">Точка Росы</span>
+        </div>
+        <div class="card-body">
+          <div class="value-row">
+            <span class="metric-value" id="valDewPoint">--.-</span>
+            <span class="metric-unit">°C</span>
+          </div>
+          <div class="metric-subtext">
+            <span id="comfortLabel">Комфортный баланс</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hardware Health Card -->
+      <div class="telemetry-card card-glass">
+        <div class="card-header">
+          <div class="card-icon icon-health">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+              <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+              <line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>
+            </svg>
+          </div>
+          <span class="card-label">Диагностика шины</span>
+        </div>
+        <div class="card-body">
+          <div class="sensor-health-list">
+            <div class="health-item">
+              <span>SCD41 (CO₂)</span>
+              <span class="health-chip chip-off" id="chipScd">Проверка</span>
+            </div>
+            <div class="health-item">
+              <span>BMP388 (Давление)</span>
+              <span class="health-chip chip-off" id="chipBmp">Проверка</span>
+            </div>
+            <div class="health-item">
+              <span>MAX30101 (PPG)</span>
+              <span class="health-chip chip-off" id="chipMax">Проверка</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Biometrics Section (MAX30101) -->
+    <section class="section-title-wrapper">
+      <h2 class="section-title">Биометрия & Пульсоксиметрия</h2>
+      <span class="section-badge">Maxim MAX30101 (Optical PPG)</span>
+    </section>
+
+    <div class="biometrics-card card-glass">
+      <div class="biometrics-header">
+        <div class="finger-status-indicator" id="fingerStatusPill">
+          <span class="status-pulse-dot" id="fingerDot"></span>
+          <span id="fingerStatusText">Приложите палец к сенсору</span>
+        </div>
+        <div class="fsm-state-badge" id="fsmBadge">FSM: Ожидание</div>
+      </div>
+
+      <div class="biometrics-grid">
+        <!-- Pulse / Heart Rate -->
+        <div class="bio-metric-box">
+          <div class="bio-icon-heart-wrapper">
+            <svg class="heart-svg" id="heartIcon" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+          </div>
+          <div class="bio-text-group">
+            <span class="bio-caption">ЧАСТОТА ПУЛЬСА</span>
+            <div class="bio-val-row">
+              <span class="bio-value" id="valHeartRate">--</span>
+              <span class="bio-unit">BPM</span>
+            </div>
+            <span class="bio-sub" id="valHrRaw">Фильтрация гармоник /2</span>
+          </div>
+        </div>
+
+        <!-- SpO2 Oxygen Saturation -->
+        <div class="bio-metric-box">
+          <div class="bio-icon-spo2-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+              <path d="M12 9v6M9 12h6"/>
+            </svg>
+          </div>
+          <div class="bio-text-group">
+            <span class="bio-caption">КИСЛОРОД КРОВИ (SpO₂)</span>
+            <div class="bio-val-row">
+              <span class="bio-value text-cyan" id="valSpo2">--</span>
+              <span class="bio-unit">%</span>
+            </div>
+            <span class="bio-sub">Индекс перфузии: <strong id="valPi">-- %</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Real-Time Waveform Canvas -->
+      <div class="waveform-container">
+        <div class="waveform-header">
+          <span>СИНХРОНИЗИРОВАННАЯ ФОТОПЛЕТИЗМОГРАММА (PPG WAVEFORM)</span>
+          <span class="waveform-rate">25 SPS &bull; AGC Drive: <span id="valAgcDrive">60</span>/255</span>
+        </div>
+        <canvas id="ppgCanvas" width="800" height="120"></canvas>
+      </div>
+    </div>
+
+    <!-- Real-Time Trend Charts -->
+    <section class="section-title-wrapper">
+      <h2 class="section-title">История & Тренды</h2>
+      <div class="chart-tab-group">
+        <button class="chart-tab active" data-chart="co2">CO₂ (ppm)</button>
+        <button class="chart-tab" data-chart="climate">Темп / Влажность</button>
+        <button class="chart-tab" data-chart="pressure">Давление</button>
+      </div>
+    </section>
+
+    <div class="chart-card card-glass">
+      <div class="chart-container">
+        <canvas id="telemetryChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>AeroSense &bull; Seeed Studio XIAO nRF52840 Sense &bull; Bluetooth 5.0 LE</p>
+      <p class="footer-sub">Standard Nordic UART Service (NUS) &bull; 2026</p>
+    </footer>
+
+  </div>
+
+  <!-- Toast Notification Popup -->
+  <div class="toast" id="toastNotification">
+    <span class="toast-message" id="toastMessage">Уведомление</span>
+  </div>
+
+  <!-- Confirmation Modal (for Reboot) -->
+  <div class="modal-overlay hidden" id="rebootModal">
+    <div class="modal-card card-glass">
+      <div class="modal-icon text-red">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/>
+        </svg>
+      </div>
+      <h3 class="modal-title">Перезагрузка устройства?</h3>
+      <p class="modal-text">Команда отправит системный сброс (NVIC_SystemReset) на микроконтроллер Seeed XIAO nRF52840 по Bluetooth.</p>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="btnCancelReboot">Отмена</button>
+        <button class="btn btn-danger" id="btnConfirmReboot">Перезагрузить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Application Logic -->
+  <script src="app.js"></script>
+</body>
+</html>

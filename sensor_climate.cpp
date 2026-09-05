@@ -132,3 +132,11 @@ void ClimateSensorManager::update(unsigned long currentMillis) {
     }
   }
 }
+
+void ClimateSensorManager::resetRelativeAltitude() {
+  if (data_.pressure_hpa > 0.0f) {
+    baselinePressureHpa_ = data_.pressure_hpa;
+    data_.relative_altitude_m = 0.0f;
+  }
+}
+
