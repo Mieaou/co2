@@ -339,8 +339,7 @@ void loop() {
     char cmd = static_cast<char>(Serial.read());
     if (cmd == 'j' || cmd == 'J') {
       outputJson = true;
-      Serial.println(F("[*] Switched to JSON telemetry"));
-      lastTelemetryMs = 0;
+      lastTelemetryMs = 0; // Trigger immediate JSON packet without plain text banner
     } else if (cmd == 'd' || cmd == 'D') {
       outputJson = false;
       Serial.println(F("[*] Switched to Visual Dashboard"));

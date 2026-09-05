@@ -217,7 +217,11 @@ void PpgSensorManager::update() {
             redBuffer_[sampleCount_] = red;
             irBuffer_[sampleCount_] = ir;
             sampleCount_++;
-            data_.buffer_progress_pct = static_cast<uint8_t>((sampleCount_ * 100) / BUFFER_SIZE);
+            if (data_.state == PPG_STATE_ACQUIRING) {
+              data_.buffer_progress_pct = static_cast<uint8_t>((sampleCount_ * 100) / BUFFER_SIZE);
+            } else {
+              data_.buffer_progress_pct = 100;
+            }
           }
 
           // When buffer capacity is reached (100 samples = 4 seconds)
