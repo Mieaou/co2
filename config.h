@@ -104,10 +104,10 @@ constexpr uint32_t PPG_AGC_TARGET_MAX = 165000;
 constexpr uint32_t PPG_MIN_RED_SNR_THRESHOLD = 8000;
 
 /// Infrared raw threshold for finger touch detection (entry threshold)
-constexpr uint32_t PPG_FINGER_THRESHOLD = 20000;
+constexpr uint32_t PPG_FINGER_THRESHOLD = 50000;
 
 /// Infrared raw threshold for finger release (hysteresis exit threshold)
-constexpr uint32_t PPG_FINGER_RELEASE_THRESHOLD = 12000;
+constexpr uint32_t PPG_FINGER_RELEASE_THRESHOLD = 40000;
 
 /// Number of consecutive low samples required to confirm finger removal (debounce ~320ms at 25 Hz)
 constexpr uint8_t PPG_FINGER_RELEASE_DEBOUNCE_SAMPLES = 8;
@@ -171,10 +171,10 @@ constexpr int32_t SPO2_MAX_PCT = 100;
 constexpr float MIN_PERFUSION_INDEX = 0.15f;
 
 /// Minimum peak-to-peak AC amplitude (counts) to differentiate living pulsatile tissue from static cloth/bed noise
-constexpr float PPG_MIN_DYNAMIC_RANGE = 120.0f;
+constexpr float PPG_MIN_DYNAMIC_RANGE = 400.0f;
 
 /// Minimum cardiac cycle AC amplitude for IR and Red channels
-constexpr float PPG_MIN_AC_AMPLITUDE_IR = 60.0f;
-constexpr float PPG_MIN_AC_AMPLITUDE_RED = 30.0f;
+constexpr float PPG_MIN_AC_AMPLITUDE_IR = 200.0f;
+constexpr float PPG_MIN_AC_AMPLITUDE_RED = 100.0f;
 
 #endif // CONFIG_H
