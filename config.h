@@ -169,4 +169,11 @@ constexpr int32_t SPO2_MAX_PCT = 100;
 /// Minimum allowable Perfusion Index (PI %) for reliable biometric estimation
 constexpr float MIN_PERFUSION_INDEX = 0.20f;
 
+/// Minimum peak-to-peak AC amplitude (counts) to differentiate living pulsatile tissue from static cloth/bed noise
+constexpr float PPG_MIN_DYNAMIC_RANGE = 120.0f;
+
+/// Minimum cardiac cycle AC amplitude for IR and Red channels
+constexpr float PPG_MIN_AC_AMPLITUDE_IR = 60.0f;
+constexpr float PPG_MIN_AC_AMPLITUDE_RED = 30.0f;
+
 #endif // CONFIG_H

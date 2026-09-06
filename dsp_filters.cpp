@@ -4,6 +4,7 @@
  */
 
 #include "dsp_filters.h"
+#include "config.h"
 
 float filterHarmonics(float currentVal, float prevStableVal, float tolerance) {
   if (currentVal <= 10.0f) {
@@ -105,7 +106,7 @@ void processPpgSignal(
     if (smoothed[i] < minVal) minVal = smoothed[i];
   }
   float dynamicRange = maxVal - minVal;
-  if (dynamicRange < 25.0f) return; // Signal too flat for pulsatile detection
+  if (dynamicRange < PPG_MIN_DYNAMIC_RANGE) return; // Signal too flat for pulsatile detection (rejects cloth/table noise)
 
   // Adaptive threshold: set to 42% of peak-to-peak amplitude above floor
   // This naturally suppresses low-amplitude dicrotic notches
@@ -142,7 +143,10 @@ void processPpgSignal(
     }
   }
 
-  // 7. Calculate Heart Rate from verified inter-beat intervals
+  // 7. Calculate candidate Heart Rate from verified inter-beat intervals
+  float candidateBpm = 0.0f;
+  bool candidateHrFound = false;
+
   if (numPeaks >= 2) {
     float intervalSum = 0.0f;
     int validIntervals = 0;
@@ -158,8 +162,8 @@ void processPpgSignal(
       float avgInterval = intervalSum / static_cast<float>(validIntervals);
       float calculatedBpm = (static_cast<float>(fs) * 60.0f) / avgInterval;
       if (calculatedBpm >= 35.0f && calculatedBpm <= 220.0f) {
-        outHr = static_cast<int32_t>(roundf(calculatedBpm));
-        outHrValid = true;
+        candidateBpm = calculatedBpm;
+        candidateHrFound = true;
       }
     }
   }
@@ -193,17 +197,25 @@ void processPpgSignal(
       float dcRed = static_cast<float>(maxRed + minRed) * 0.5f;
       float dcIr = static_cast<float>(maxIr + minIr) * 0.5f;
 
-      if (acIr >= 12.0f && dcIr > 0.0f && dcRed > 0.0f) {
+      // Require meaningful physiological AC pulsation on both optical wavelengths
+      if (acIr >= PPG_MIN_AC_AMPLITUDE_IR && acRed >= PPG_MIN_AC_AMPLITUDE_RED && dcIr > 0.0f && dcRed > 0.0f) {
         float r = (acRed / dcRed) / (acIr / dcIr);
         float pi = (acIr / dcIr) * 100.0f;
 
-        // Physiological bounds check for R (0.15 to 2.0 corresponds to ~70% to 100% SpO2)
-        if (r >= 0.15f && r <= 2.0f && validCycles < 15) {
+        // Physiological bounds check for R (0.18 to 1.85 corresponds to ~72% to 100% SpO2)
+        if (r >= 0.18f && r <= 1.85f && validCycles < 15) {
           rValues[validCycles] = r;
           piValues[validCycles] = pi;
           validCycles++;
         }
       }
+    }
+
+    // Only confirm Heart Rate as valid if at least one genuine physiological cycle was validated!
+    // This strictly prevents reporting pulse on static objects (bed, table, sheets) where AC is noise.
+    if (candidateHrFound && validCycles > 0) {
+      outHr = static_cast<int32_t>(roundf(candidateBpm));
+      outHrValid = true;
     }
 
     // Median selection across confirmed cycles (rejects motion artifacts)
@@ -266,7 +278,8 @@ float calculatePerfusionIndex(const uint32_t* buffer, size_t length) {
 
     float dc = static_cast<float>(sumV) / static_cast<float>(SEG_LEN);
     float ac = static_cast<float>(maxV - minV);
-    if (dc > 0.0f && ac >= 10.0f) {
+    // Exclude static optical background noise below 45 counts
+    if (dc > 0.0f && ac >= 45.0f) {
       piSum += (ac / dc) * 100.0f;
       validSegs++;
     }

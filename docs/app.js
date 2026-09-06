@@ -41,6 +41,9 @@ let ppgCanvas, ppgCtx;
 let ppgPhase = 0;
 let currentBpm = 72;
 let hasFinger = false;
+let isHrValid = false;
+let lastTouchBpm = null;
+let lastTouchSpo2 = null;
 
 // =============================================================================
 // INITIALIZATION
@@ -192,6 +195,7 @@ function onDisconnected() {
   showToast("Устройство отключено");
   rxCharacteristic = null;
   txCharacteristic = null;
+  resetBiometricsUi();
 }
 
 function setConnectionStatus(connected, deviceName = "") {
@@ -304,11 +308,18 @@ function renderTelemetry(data) {
   const fingerDot = document.getElementById("fingerDot");
   const fingerText = document.getElementById("fingerStatusText");
   const heartIcon = document.getElementById("heartIcon");
+  const elHeartRate = document.getElementById("valHeartRate");
+  const elSpo2 = document.getElementById("valSpo2");
+  const elHrRaw = document.getElementById("valHrRaw");
 
   if (hasFinger) {
     fingerDot.classList.add("active");
   } else {
     fingerDot.classList.remove("active");
+    // When finger is removed, immediately clear touch session history
+    lastTouchBpm = null;
+    lastTouchSpo2 = null;
+    isHrValid = false;
   }
 
   // FSM State mapping
@@ -327,32 +338,81 @@ function renderTelemetry(data) {
       fsmBadge.textContent = `FSM: Буфер ${data.buffer_pct}%`;
       break;
     case 3:
-      fingerText.textContent = "Активное отслеживание пульса";
-      fsmBadge.textContent = "FSM: Активно";
+      fingerText.textContent = (data.hr_valid && data.hr_bpm > 0) ? "Активное отслеживание пульса" : "Анализ пульсовой волны...";
+      fsmBadge.textContent = (data.hr_valid && data.hr_bpm > 0) ? "FSM: Активно" : "FSM: Анализ";
       break;
     default:
       fingerText.textContent = "Сенсор активен";
       fsmBadge.textContent = "FSM: Норма";
   }
 
-  // Heart Rate
-  if (data.hr_valid && data.hr_bpm > 0) {
+  // Heart Rate & SpO2 rendering
+  if (!hasFinger) {
+    // 1. No finger: clear display immediately
+    elHeartRate.textContent = "--";
+    elHeartRate.classList.remove("stale-value");
+    heartIcon.classList.remove("beating");
+    if (elHrRaw) elHrRaw.textContent = "Фильтрация гармоник /2";
+
+    elSpo2.textContent = "--";
+    elSpo2.classList.remove("stale-value");
+  } else if (data.hr_valid && data.hr_bpm > 0) {
+    // 2. Finger present and BPM is actively valid: show bright value
+    isHrValid = true;
     currentBpm = data.hr_bpm;
-    document.getElementById("valHeartRate").textContent = data.hr_bpm;
+    lastTouchBpm = data.hr_bpm;
+    if (data.spo2_valid && data.spo2_pct > 0) {
+      lastTouchSpo2 = data.spo2_pct;
+    }
+
+    elHeartRate.textContent = data.hr_bpm;
+    elHeartRate.classList.remove("stale-value");
     heartIcon.classList.add("beating");
-    // Synchronize CSS heart animation duration with actual BPM
     const beatSec = (60 / Math.max(40, Math.min(220, data.hr_bpm))).toFixed(2);
     heartIcon.style.animationDuration = `${beatSec}s`;
-  } else {
-    document.getElementById("valHeartRate").textContent = "--";
-    heartIcon.classList.remove("beating");
-  }
+    if (elHrRaw) elHrRaw.textContent = "Пульс стабилен (фильтрация /2)";
 
-  // SpO2
-  if (data.spo2_valid && data.spo2_pct > 0) {
-    document.getElementById("valSpo2").textContent = data.spo2_pct;
+    if (data.spo2_valid && data.spo2_pct > 0) {
+      elSpo2.textContent = data.spo2_pct;
+      elSpo2.classList.remove("stale-value");
+    } else if (lastTouchSpo2 !== null) {
+      elSpo2.textContent = lastTouchSpo2;
+      elSpo2.classList.add("stale-value");
+    } else {
+      elSpo2.textContent = "--";
+      elSpo2.classList.remove("stale-value");
+    }
   } else {
-    document.getElementById("valSpo2").textContent = "--";
+    // 3. Finger IS present, but BPM is temporarily invalid (calibrating, acquiring, or momentary noise)
+    isHrValid = false;
+    heartIcon.classList.remove("beating");
+
+    if (lastTouchBpm !== null) {
+      // Retain the old measured value in GRAY while finger remains placed
+      elHeartRate.textContent = lastTouchBpm;
+      elHeartRate.classList.add("stale-value");
+      if (elHrRaw) elHrRaw.textContent = "Перерасчет (удержание)";
+
+      if (lastTouchSpo2 !== null) {
+        elSpo2.textContent = lastTouchSpo2;
+        elSpo2.classList.add("stale-value");
+      } else {
+        elSpo2.textContent = "--";
+        elSpo2.classList.remove("stale-value");
+      }
+    } else {
+      // First touch before any calculation was completed
+      elHeartRate.textContent = "--";
+      elHeartRate.classList.remove("stale-value");
+      if (elHrRaw) {
+        elHrRaw.textContent = (data.ppg_state === 1) ? "Калибровка AGC..." :
+                              (data.ppg_state === 2) ? `Буфер ${data.buffer_pct || 0}%...` :
+                              "Поиск пульса...";
+      }
+
+      elSpo2.textContent = "--";
+      elSpo2.classList.remove("stale-value");
+    }
   }
 
   document.getElementById("valPi").textContent = data.perfusion_index != null ? `${data.perfusion_index.toFixed(2)} %` : "-- %";
@@ -660,8 +720,8 @@ function drawPpgLoop() {
     ppgCtx.stroke();
   }
 
-  if (hasFinger) {
-    // Physiological PPG Pulse Waveform with Dicrotic Notch
+  if (hasFinger && isHrValid) {
+    // 1. Active validated arterial PPG wave with dicrotic notch
     ppgPhase += (currentBpm / 60) * 0.08;
 
     ppgCtx.strokeStyle = "#ef4444";
@@ -674,12 +734,10 @@ function drawPpgLoop() {
       const t = (x / 45) - ppgPhase;
       const cycle = (t % (2 * Math.PI) + (2 * Math.PI)) % (2 * Math.PI);
 
-      // Physiological cardiac reflection model
       let wave = 0;
       if (cycle < Math.PI * 0.8) {
         wave = Math.sin(cycle * 1.25);
       } else if (cycle < Math.PI * 1.3) {
-        // Dicrotic notch depression + secondary reflection peak
         wave = 0.25 * Math.sin((cycle - Math.PI * 0.8) * 3);
       } else {
         wave = 0;
@@ -692,11 +750,55 @@ function drawPpgLoop() {
     ppgCtx.stroke();
     ppgCtx.shadowBlur = 0;
 
-  } else {
-    // Quiescent flat baseline with gentle ambient shimmer
-    ppgPhase += 0.02;
-    ppgCtx.strokeStyle = "rgba(100, 116, 139, 0.4)";
+  } else if (hasFinger && lastTouchBpm !== null) {
+    // 2. Finger present, holding previous stale BPM in gray (no red glow)
+    ppgPhase += (lastTouchBpm / 60) * 0.08;
+
+    ppgCtx.strokeStyle = "rgba(148, 163, 184, 0.55)";
+    ppgCtx.lineWidth = 1.8;
+    ppgCtx.shadowBlur = 0;
+    ppgCtx.beginPath();
+
+    for (let x = 0; x < w; x++) {
+      const t = (x / 45) - ppgPhase;
+      const cycle = (t % (2 * Math.PI) + (2 * Math.PI)) % (2 * Math.PI);
+
+      let wave = 0;
+      if (cycle < Math.PI * 0.8) {
+        wave = Math.sin(cycle * 1.25);
+      } else if (cycle < Math.PI * 1.3) {
+        wave = 0.25 * Math.sin((cycle - Math.PI * 0.8) * 3);
+      } else {
+        wave = 0;
+      }
+
+      const y = (h / 2) + 12 - (wave * (h * 0.38));
+      if (x === 0) ppgCtx.moveTo(x, y);
+      else ppgCtx.lineTo(x, y);
+    }
+    ppgCtx.stroke();
+
+  } else if (hasFinger) {
+    // 3. Finger present, but NO valid BPM yet (Calibrating / Acquiring buffer / Searching)
+    // Draw gentle scanning/calibration wave without pretending to have active heartbeat
+    ppgPhase += 0.04;
+    ppgCtx.strokeStyle = "rgba(56, 189, 248, 0.45)";
     ppgCtx.lineWidth = 1.5;
+    ppgCtx.shadowBlur = 0;
+    ppgCtx.beginPath();
+    for (let x = 0; x < w; x++) {
+      const y = (h / 2) + Math.sin((x * 0.06) - ppgPhase) * 6;
+      if (x === 0) ppgCtx.moveTo(x, y);
+      else ppgCtx.lineTo(x, y);
+    }
+    ppgCtx.stroke();
+
+  } else {
+    // 4. Quiescent flat baseline with gentle ambient shimmer (No finger)
+    ppgPhase += 0.02;
+    ppgCtx.strokeStyle = "rgba(100, 116, 139, 0.35)";
+    ppgCtx.lineWidth = 1.5;
+    ppgCtx.shadowBlur = 0;
     ppgCtx.beginPath();
     for (let x = 0; x < w; x++) {
       const y = (h / 2) + Math.sin((x * 0.04) + ppgPhase) * 2;
@@ -734,13 +836,24 @@ function startDemo() {
   let simCo2 = 680;
   let simTemp = 23.4;
   let simHum = 45.0;
+  let simCycle = 0;
 
   demoTimer = setInterval(() => {
     simTimeMs += 3000;
+    simCycle++;
     // Gradual realistic drift
     simCo2 += (Math.random() * 40 - 15);
     simTemp += (Math.random() * 0.2 - 0.1);
     simHum += (Math.random() * 0.4 - 0.2);
+
+    // Simulate occasional finger touch dynamics in demo:
+    // Cycle 5: finger present but hr_valid false (tests stale holding!)
+    let demoHrValid = true;
+    let demoHr = 72 + Math.round(Math.random() * 6);
+    if (simCycle % 6 === 0) {
+      demoHrValid = false; // test stale display
+      demoHr = 0;
+    }
 
     const mockPacket = {
       time_ms: simTimeMs,
@@ -757,14 +870,14 @@ function startDemo() {
       altitude_m: 14.5,
       rel_altitude_m: 0.05,
       finger_detected: true,
-      ppg_state: 3,
-      buffer_pct: 100,
-      hr_bpm: 68 + Math.round(Math.random() * 8),
-      hr_bpm_raw: 69,
-      hr_valid: true,
+      ppg_state: demoHrValid ? 3 : 2,
+      buffer_pct: demoHrValid ? 100 : 75,
+      hr_bpm: demoHr,
+      hr_bpm_raw: demoHr,
+      hr_valid: demoHrValid,
       spo2_pct: 98,
       spo2_raw: 98,
-      spo2_valid: true,
+      spo2_valid: demoHrValid,
       perfusion_index: 2.34,
       led_brightness: 60,
       bmp_ok: true,
@@ -783,6 +896,35 @@ function stopDemo() {
   document.getElementById("demoLabel").textContent = "Демо-режим";
   setConnectionStatus(false);
   showToast("Демо-режим остановлен");
+  resetBiometricsUi();
+}
+
+function resetBiometricsUi() {
+  hasFinger = false;
+  isHrValid = false;
+  lastTouchBpm = null;
+  lastTouchSpo2 = null;
+  const elHeartRate = document.getElementById("valHeartRate");
+  const elSpo2 = document.getElementById("valSpo2");
+  const heartIcon = document.getElementById("heartIcon");
+  const fingerDot = document.getElementById("fingerDot");
+  const fingerText = document.getElementById("fingerStatusText");
+  const fsmBadge = document.getElementById("fsmBadge");
+  const elHrRaw = document.getElementById("valHrRaw");
+
+  if (elHeartRate) {
+    elHeartRate.textContent = "--";
+    elHeartRate.classList.remove("stale-value");
+  }
+  if (elSpo2) {
+    elSpo2.textContent = "--";
+    elSpo2.classList.remove("stale-value");
+  }
+  if (heartIcon) heartIcon.classList.remove("beating");
+  if (fingerDot) fingerDot.classList.remove("active");
+  if (fingerText) fingerText.textContent = "Приложите палец к сенсору";
+  if (fsmBadge) fsmBadge.textContent = "FSM: Ожидание";
+  if (elHrRaw) elHrRaw.textContent = "Фильтрация гармоник /2";
 }
 
 // =============================================================================
