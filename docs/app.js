@@ -334,7 +334,6 @@ function renderTelemetry(data) {
     elHeartRate.classList.remove("stale-value");
     heartIcon.style.opacity = "0"; // Hide heart
     heartIcon.classList.remove("beating");
-    if (elHrRaw) elHrRaw.textContent = "Нет пальца";
 
     elSpo2.textContent = "--";
     elSpo2.classList.remove("stale-value");
