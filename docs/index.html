@@ -22,7 +22,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
   <!-- App Stylesheet -->
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=1.2.0">
 </head>
 <body>
 
@@ -43,7 +43,7 @@
           </svg>
         </div>
         <div class="brand-titles">
-          <h1 class="brand-title">AeroSense</h1>
+          <h1 class="brand-title">AeroSense <span class="brand-version" id="brandVersion">v1.2.0</span></h1>
           <span class="brand-subtitle">Environmental & Biometric Radar</span>
         </div>
       </div>
@@ -397,7 +397,7 @@
     <!-- Footer -->
     <footer class="app-footer">
       <p>AeroSense &bull; Seeed Studio XIAO nRF52840 Sense &bull; Bluetooth 5.0 LE</p>
-      <p class="footer-sub">Standard Nordic UART Service (NUS) &bull; 2026</p>
+      <p class="footer-sub">Standard Nordic UART Service (NUS) &bull; <span id="footerVersion">v1.2.0</span> &bull; 2026</p>
     </footer>
 
   </div>
@@ -425,6 +425,6 @@
   </div>
 
   <!-- Application Logic -->
-  <script src="app.js"></script>
+  <script src="app.js?v=1.2.0"></script>
 </body>
 </html>

@@ -4,6 +4,9 @@
  * =============================================================================
  */
 
+// Application Version
+const APP_VERSION = "v1.2.0";
+
 // Nordic UART Service (NUS) UUIDs
 const NUS_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
 const NUS_TX_UUID      = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"; // Notify from board
@@ -55,13 +58,22 @@ document.addEventListener("DOMContentLoaded", () => {
   initCanvas();
   checkBluetoothSupport();
 
-  // Register PWA Service Worker if supported
-  if ("serviceWorker" in navigator && location.protocol === "https:") {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+  // Register PWA Service Worker if supported and check for updates
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+    navigator.serviceWorker.register("sw.js").then((reg) => {
+      reg.update().catch(() => {});
+    }).catch(() => {});
   }
 });
 
 function initDOM() {
+  // Populate Version Badges
+  const elBrandVer = document.getElementById("brandVersion");
+  if (elBrandVer) elBrandVer.textContent = APP_VERSION;
+  const elFooterVer = document.getElementById("footerVersion");
+  if (elFooterVer) elFooterVer.textContent = `${APP_VERSION} (Build 2026.09.06)`;
+  console.log(`[AeroSense] App version: ${APP_VERSION}`);
+
   // Connection Button
   const btnConnect = document.getElementById("btnConnect");
   btnConnect.addEventListener("click", () => {

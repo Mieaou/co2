@@ -1,9 +1,9 @@
-const CACHE_NAME = 'aerosense-v1';
+const CACHE_NAME = 'aerosense-v1.2.0';
 const ASSETS = [
   './',
   './index.html',
-  './style.css',
-  './app.js',
+  './style.css?v=1.2.0',
+  './app.js?v=1.2.0',
   './manifest.json'
 ];
 
@@ -25,8 +25,19 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
+// Network-first strategy for instant GitHub Pages updates with offline cache fallback
 self.addEventListener('fetch', (e) => {
   e.respondWith(
-    caches.match(e.request).then((res) => res || fetch(e.request).catch(() => {}))
+    fetch(e.request)
+      .then((networkRes) => {
+        if (networkRes && networkRes.status === 200 && e.request.method === 'GET') {
+          const resClone = networkRes.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(e.request, resClone);
+          });
+        }
+        return networkRes;
+      })
+      .catch(() => caches.match(e.request))
   );
 });
