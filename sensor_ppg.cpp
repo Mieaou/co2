@@ -315,6 +315,15 @@ void PpgSensorManager::update() {
               irBuffer_[i - PPG_SHIFT_SAMPLES]  = irBuffer_[i];
             }
             sampleCount_ = BUFFER_SIZE - PPG_SHIFT_SAMPLES;
+            
+            // -----------------------------------------------------------------
+            // 7. Crosstalk / Dead-Object Timeout (10 seconds)
+            // -----------------------------------------------------------------
+            // If the IR DC level remains high due to internal case reflection, but
+            // no valid pulsatile AC signal is found for 10 seconds, force a reset.
+            if (!data_.hr_valid && (now - touchStartMs_ > 10000) && (lastValidHrMs_ == 0 || now - lastValidHrMs_ > 10000)) {
+              resetBiometrics();
+            }
           }
         }
       }
