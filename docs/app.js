@@ -5,7 +5,7 @@
  */
 
 // Application Version
-const APP_VERSION = "v1.2.0";
+const APP_VERSION = "v1.3.0";
 
 // Nordic UART Service (NUS) UUIDs
 const NUS_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
@@ -71,7 +71,7 @@ function initDOM() {
   const elBrandVer = document.getElementById("brandVersion");
   if (elBrandVer) elBrandVer.textContent = APP_VERSION;
   const elFooterVer = document.getElementById("footerVersion");
-  if (elFooterVer) elFooterVer.textContent = `${APP_VERSION} (Build 2026.09.06)`;
+  if (elFooterVer) elFooterVer.textContent = `${APP_VERSION} (Build 2026.09.06)`;  // v1.3.0
   console.log(`[AeroSense] App version: ${APP_VERSION}`);
 
   // Connection Button
@@ -316,46 +316,15 @@ function renderTelemetry(data) {
 
   // 4. Biometrics
   hasFinger = !!data.finger_detected;
-  const fingerPill = document.getElementById("fingerStatusPill");
-  const fingerDot = document.getElementById("fingerDot");
-  const fingerText = document.getElementById("fingerStatusText");
   const heartIcon = document.getElementById("heartIcon");
   const elHeartRate = document.getElementById("valHeartRate");
   const elSpo2 = document.getElementById("valSpo2");
-  const elHrRaw = document.getElementById("valHrRaw");
 
-  if (hasFinger) {
-    fingerDot.classList.add("active");
-  } else {
-    fingerDot.classList.remove("active");
+  if (!hasFinger) {
     // When finger is removed, immediately clear touch session history
     lastTouchBpm = null;
     lastTouchSpo2 = null;
     isHrValid = false;
-  }
-
-  // FSM State mapping
-  const fsmBadge = document.getElementById("fsmBadge");
-  switch (data.ppg_state) {
-    case 0:
-      fingerText.textContent = "Приложите палец к сенсору";
-      fsmBadge.textContent = "FSM: Ожидание";
-      break;
-    case 1:
-      fingerText.textContent = "Авто-калибровка усиления (AGC)...";
-      fsmBadge.textContent = "FSM: Калибровка";
-      break;
-    case 2:
-      fingerText.textContent = `Накопление буфера (${data.buffer_pct || 0}%)...`;
-      fsmBadge.textContent = `FSM: Буфер ${data.buffer_pct}%`;
-      break;
-    case 3:
-      fingerText.textContent = (data.hr_valid && data.hr_bpm > 0) ? "Активное отслеживание пульса" : "Анализ пульсовой волны...";
-      fsmBadge.textContent = (data.hr_valid && data.hr_bpm > 0) ? "FSM: Активно" : "FSM: Анализ";
-      break;
-    default:
-      fingerText.textContent = "Сенсор активен";
-      fsmBadge.textContent = "FSM: Норма";
   }
 
   // Heart Rate & SpO2 rendering
@@ -380,14 +349,13 @@ function renderTelemetry(data) {
 
     elHeartRate.textContent = data.hr_bpm;
     elHeartRate.classList.remove("stale-value");
-    
+
     heartIcon.style.opacity = "1";
     heartIcon.style.color = "#ef4444"; // Red heart
     heartIcon.classList.add("beating");
-    
+
     const beatSec = (60 / Math.max(40, Math.min(220, data.hr_bpm))).toFixed(2);
     heartIcon.style.animationDuration = `${beatSec}s`;
-    if (elHrRaw) elHrRaw.textContent = "Пульс стабилен";
 
     if (data.spo2_valid && data.spo2_pct > 0) {
       elSpo2.textContent = data.spo2_pct;
@@ -410,7 +378,6 @@ function renderTelemetry(data) {
       // 4. Recalculating: grey heart, show last valid value
       elHeartRate.textContent = lastTouchBpm;
       elHeartRate.classList.add("stale-value");
-      if (elHrRaw) elHrRaw.textContent = "Перерасчет...";
 
       if (lastTouchSpo2 !== null) {
         elSpo2.textContent = lastTouchSpo2;
@@ -423,17 +390,10 @@ function renderTelemetry(data) {
       // 2. Calculating initially: grey heart, no number
       elHeartRate.textContent = "--";
       elHeartRate.classList.remove("stale-value");
-      if (elHrRaw) {
-        elHrRaw.textContent = "Поиск пульса...";
-      }
-
       elSpo2.textContent = "--";
       elSpo2.classList.remove("stale-value");
     }
   }
-
-  document.getElementById("valPi").textContent = data.perfusion_index != null ? `${data.perfusion_index.toFixed(2)} %` : "-- %";
-  document.getElementById("valAgcDrive").textContent = data.led_brightness || 60;
 
   // 5. Append to Rolling History & Chart
   const timeLabel = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -924,10 +884,6 @@ function resetBiometricsUi() {
   const elHeartRate = document.getElementById("valHeartRate");
   const elSpo2 = document.getElementById("valSpo2");
   const heartIcon = document.getElementById("heartIcon");
-  const fingerDot = document.getElementById("fingerDot");
-  const fingerText = document.getElementById("fingerStatusText");
-  const fsmBadge = document.getElementById("fsmBadge");
-  const elHrRaw = document.getElementById("valHrRaw");
 
   if (elHeartRate) {
     elHeartRate.textContent = "--";
@@ -941,10 +897,6 @@ function resetBiometricsUi() {
     heartIcon.classList.remove("beating");
     heartIcon.style.opacity = "0";
   }
-  if (fingerDot) fingerDot.classList.remove("active");
-  if (fingerText) fingerText.textContent = "Приложите палец к сенсору";
-  if (fsmBadge) fsmBadge.textContent = "FSM: Ожидание";
-  if (elHrRaw) elHrRaw.textContent = "Нет пальца";
 }
 
 // =============================================================================

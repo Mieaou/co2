@@ -318,19 +318,10 @@
 
     <!-- Biometrics Section (MAX30101) -->
     <section class="section-title-wrapper">
-      <h2 class="section-title">Биометрия & Пульсоксиметрия</h2>
-      <span class="section-badge">Maxim MAX30101 (Optical PPG)</span>
+      <h2 class="section-title">Биометрия</h2>
     </section>
 
     <div class="biometrics-card card-glass">
-      <div class="biometrics-header">
-        <div class="finger-status-indicator" id="fingerStatusPill">
-          <span class="status-pulse-dot" id="fingerDot"></span>
-          <span id="fingerStatusText">Приложите палец к сенсору</span>
-        </div>
-        <div class="fsm-state-badge" id="fsmBadge">FSM: Ожидание</div>
-      </div>
-
       <div class="biometrics-grid">
         <!-- Pulse / Heart Rate -->
         <div class="bio-metric-box">
@@ -339,13 +330,9 @@
               <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
             </svg>
           </div>
-          <div class="bio-text-group">
-            <span class="bio-caption">ЧАСТОТА ПУЛЬСА</span>
-            <div class="bio-val-row">
-              <span class="bio-value" id="valHeartRate">--</span>
-              <span class="bio-unit">BPM</span>
-            </div>
-            <span class="bio-sub" id="valHrRaw">Фильтрация гармоник /2</span>
+          <div class="bio-val-row">
+            <span class="bio-value" id="valHeartRate">--</span>
+            <span class="bio-unit">BPM</span>
           </div>
         </div>
 
@@ -357,30 +344,22 @@
               <path d="M12 9v6M9 12h6"/>
             </svg>
           </div>
-          <div class="bio-text-group">
-            <span class="bio-caption">КИСЛОРОД КРОВИ (SpO₂)</span>
-            <div class="bio-val-row">
-              <span class="bio-value text-cyan" id="valSpo2">--</span>
-              <span class="bio-unit">%</span>
-            </div>
-            <span class="bio-sub">Индекс перфузии: <strong id="valPi">-- %</strong></span>
+          <div class="bio-val-row">
+            <span class="bio-value text-cyan" id="valSpo2">--</span>
+            <span class="bio-unit">% SpO₂</span>
           </div>
         </div>
       </div>
 
       <!-- Real-Time Waveform Canvas -->
       <div class="waveform-container">
-        <div class="waveform-header">
-          <span>СИНХРОНИЗИРОВАННАЯ ФОТОПЛЕТИЗМОГРАММА (PPG WAVEFORM)</span>
-          <span class="waveform-rate">25 SPS &bull; AGC Drive: <span id="valAgcDrive">60</span>/255</span>
-        </div>
-        <canvas id="ppgCanvas" width="800" height="120"></canvas>
+        <canvas id="ppgCanvas" width="800" height="90"></canvas>
       </div>
     </div>
 
     <!-- Real-Time Trend Charts -->
     <section class="section-title-wrapper">
-      <h2 class="section-title">История & Тренды</h2>
+      <h2 class="section-title">История &amp; Тренды</h2>
       <div class="chart-tab-group">
         <button class="chart-tab active" data-chart="co2">CO₂ (ppm)</button>
         <button class="chart-tab" data-chart="climate">Темп / Влажность</button>
@@ -397,7 +376,7 @@
     <!-- Footer -->
     <footer class="app-footer">
       <p>AeroSense &bull; Seeed Studio XIAO nRF52840 Sense &bull; Bluetooth 5.0 LE</p>
-      <p class="footer-sub">Standard Nordic UART Service (NUS) &bull; <span id="footerVersion">v1.2.0</span> &bull; 2026</p>
+      <p class="footer-sub">Standard Nordic UART Service (NUS) &bull; <span id="footerVersion">v1.3.0</span> &bull; 2026</p>
     </footer>
 
   </div>
@@ -425,6 +404,6 @@
   </div>
 
   <!-- Application Logic -->
-  <script src="app.js?v=1.2.0"></script>
+  <script src="app.js?v=1.3.0"></script>
 </body>
 </html>
