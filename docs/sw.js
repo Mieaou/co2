@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aerosense-v1.2.0';
+const CACHE_NAME = 'aerosense-v1.4.0';
 const ASSETS = [
   './',
   './index.html',

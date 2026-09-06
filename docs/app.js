@@ -5,7 +5,7 @@
  */
 
 // Application Version
-const APP_VERSION = "v1.3.0";
+const APP_VERSION = "v1.4.0";
 
 // Nordic UART Service (NUS) UUIDs
 const NUS_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
@@ -71,7 +71,7 @@ function initDOM() {
   const elBrandVer = document.getElementById("brandVersion");
   if (elBrandVer) elBrandVer.textContent = APP_VERSION;
   const elFooterVer = document.getElementById("footerVersion");
-  if (elFooterVer) elFooterVer.textContent = `${APP_VERSION} (Build 2026.09.06)`;  // v1.3.0
+  if (elFooterVer) elFooterVer.textContent = `${APP_VERSION} (Build 2026.09.07)`;  // v1.4.0
   console.log(`[AeroSense] App version: ${APP_VERSION}`);
 
   // Connection Button
