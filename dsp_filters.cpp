@@ -1,219 +1,11 @@
 /**
  * @file dsp_filters.cpp
- * @brief Implementation of DSP filters, harmonic rejection, and physical formulas.
+ * @brief DSP filters, PPG peak detection, SpO2/PI calculation, and physical formulas.
  */
 
 #include "dsp_filters.h"
 #include "config.h"
 
-float filterHarmonics(float currentVal, float prevStableVal, float tolerance) {
-  if (currentVal <= 10.0f) {
-    return currentVal;
-  }
-
-  // If no prior stable baseline has been confirmed yet, do not arbitrarily halve
-  // the value, as true sinus tachycardia or active HR (130-180 BPM) would be corrupted.
-  if (prevStableVal <= 10.0f) {
-    return currentVal;
-  }
-
-  float ratio = currentVal / prevStableVal;
-
-  // Check for doubling harmonic (e.g. 2.0x +/- tolerance*2.0x -> 1.70x to 2.30x for tol=0.15)
-  // Physiological reflection wave (dicrotic notch) causes instantaneous 2x jumps into tachycardia.
-  // A resting rate of 60-95 BPM is never a dicrotic doubling of severe bradycardia (30-47 BPM).
-  // Therefore, require currentVal >= 100 BPM and prevStableVal >= 45 BPM before halving.
-  if (currentVal >= 100.0f && prevStableVal >= 45.0f && fabsf(ratio - 2.0f) <= (2.0f * tolerance)) {
-    return currentVal / 2.0f;
-  }
-
-  // We deliberately do NOT force an auto-doubling on ratio ~0.5x.
-  // In a multi-cycle buffer, an average rate dropping to 0.5x indicates either
-  // a genuine physiological deceleration or a self-correction from an earlier falsely
-  // doubled state. Forcing a 2.0x multiplication would lock the system in an error state.
-
-  return currentVal;
-}
-
-bool estimateFundamentalPeriodAcf(
-    const float* signal,
-    size_t length,
-    int fs,
-    int& outFundamentalLag,
-    float& outConfidence) {
-
-  outFundamentalLag = 0;
-  outConfidence = 0.0f;
-
-  if (signal == nullptr || length < 50 || fs <= 0) return false;
-
-  // Lags corresponding to physiological bounds: 220 BPM (tau ~7 at 25Hz) down to 35 BPM (tau ~43 at 25Hz)
-  int minLag = static_cast<int>(roundf(static_cast<float>(fs) * 60.0f / 220.0f));
-  int maxLag = static_cast<int>(roundf(static_cast<float>(fs) * 60.0f / 35.0f));
-  if (minLag < 6) minLag = 6;
-  if (maxLag > static_cast<int>(length) / 2) maxLag = static_cast<int>(length) / 2;
-  if (maxLag <= minLag) return false;
-
-  float acf[64];
-  for (int tau = minLag - 1; tau <= maxLag + 1 && tau < 64; ++tau) {
-    float cross = 0.0f;
-    float sumSqBase = 0.0f;
-    float sumSqTau = 0.0f;
-    size_t count = length - tau;
-
-    for (size_t i = 0; i < count; ++i) {
-      cross += signal[i] * signal[i + tau];
-      sumSqBase += signal[i] * signal[i];
-      sumSqTau += signal[i + tau] * signal[i + tau];
-    }
-    float denom = sqrtf(sumSqBase * sumSqTau);
-    acf[tau] = (denom > 1e-4f) ? (cross / denom) : 0.0f;
-  }
-
-  // Find local maxima in ACF
-  struct AcfPeak {
-    int lag;
-    float val;
-  };
-  AcfPeak peaks[16];
-  int peakCount = 0;
-
-  for (int tau = minLag; tau <= maxLag && peakCount < 16; ++tau) {
-    if (acf[tau] > 0.18f && acf[tau] > acf[tau - 1] && acf[tau] >= acf[tau + 1]) {
-      peaks[peakCount].lag = tau;
-      peaks[peakCount].val = acf[tau];
-      peakCount++;
-    }
-  }
-
-  if (peakCount == 0) return false;
-
-  // Find highest correlation peak
-  int bestIdx = 0;
-  for (int i = 1; i < peakCount; ++i) {
-    if (peaks[i].val > peaks[bestIdx].val) {
-      bestIdx = i;
-    }
-  }
-
-
-
-  int fundamentalLag = peaks[bestIdx].lag;
-  float maxConf = peaks[bestIdx].val;
-
-  // Harmonic disambiguation:
-  // Only if the strongest peak in ACF is at an abnormally high frequency / short lag
-  // (tau < 12 samples, corresponding to > 125 BPM at 25 Hz), check if there is a peak
-  // at ~2 * tau representing the true fundamental cardiac cycle.
-  // In normal resting rates (tau >= 13, <= 115 BPM), any peak at 2*tau is simply the
-  // natural periodic repetition of the heartbeat across 2 cycles and must NEVER replace tau!
-  if (fundamentalLag < 12) {
-    for (int i = 0; i < peakCount; ++i) {
-      if (peaks[i].lag > fundamentalLag) {
-        float ratio = static_cast<float>(peaks[i].lag) / static_cast<float>(fundamentalLag);
-        if (fabsf(ratio - 2.0f) <= 0.20f) {
-          if (peaks[i].val >= 0.50f * maxConf && peaks[i].val >= 0.25f) {
-            fundamentalLag = peaks[i].lag;
-            maxConf = peaks[i].val;
-            break;
-          }
-        }
-      }
-    }
-  }
-
-  outFundamentalLag = fundamentalLag;
-  outConfidence = maxConf;
-  return (maxConf >= 0.22f);
-}
-
-void pruneDicroticPeaks(
-    const int* inLocs,
-    const float* inAmps,
-    int inCount,
-    int* outLocs,
-    float* outAmps,
-    int& outCount,
-    int expectedLag) {
-
-  outCount = 0;
-  if (inLocs == nullptr || inAmps == nullptr || inCount <= 0) return;
-
-  if (inCount < 4) {
-    for (int i = 0; i < inCount; ++i) {
-      outLocs[i] = inLocs[i];
-      outAmps[i] = inAmps[i];
-    }
-    outCount = inCount;
-    return;
-  }
-
-  int intervals[30];
-  int numIntervals = inCount - 1;
-  for (int i = 0; i < numIntervals; ++i) {
-    intervals[i] = inLocs[i + 1] - inLocs[i];
-  }
-
-  int alternansIntervalCount = 0;
-  for (int i = 0; i < numIntervals - 1; ++i) {
-    int diff = abs(intervals[i] - intervals[i + 1]);
-    int sum = intervals[i] + intervals[i + 1];
-    // In true dicrotic doubling, the sum of systolic-to-dicrotic and dicrotic-to-systolic
-    // represents ONE heartbeat cycle (10 to 26 samples at 25 Hz = 58 to 150 BPM).
-    // Sums > 26 represent two full cardiac cycles and must not be treated as alternans.
-    if (diff >= 3 && sum >= 10 && sum <= 26) {
-      alternansIntervalCount++;
-    }
-  }
-
-  int evenHigherCount = 0;
-  int oddHigherCount = 0;
-  for (int i = 0; i < inCount - 1; ++i) {
-    float r = inAmps[i + 1] / (inAmps[i] + 1e-4f);
-    if (i % 2 == 0) {
-      if (r < 0.75f) evenHigherCount++;
-      else if (r > 1.33f) oddHigherCount++;
-    } else {
-      if (r > 1.33f) evenHigherCount++;
-      else if (r < 0.75f) oddHigherCount++;
-    }
-  }
-
-  bool intervalHalved = false;
-  if (expectedLag >= 12) {
-    float avgInt = 0.0f;
-    for (int i = 0; i < numIntervals; ++i) avgInt += intervals[i];
-    avgInt /= static_cast<float>(numIntervals);
-    if (avgInt <= 0.65f * static_cast<float>(expectedLag)) {
-      intervalHalved = true;
-    }
-  }
-
-  int requiredAlternans = numIntervals / 2;
-  if (requiredAlternans < 1) requiredAlternans = 1;
-
-  // Prune only if BOTH interval alternans (or halved intervals from ACF) AND amplitude alternans agree CONSISTENTLY
-  bool isAlternans = (alternansIntervalCount >= requiredAlternans && (evenHigherCount >= requiredAlternans || oddHigherCount >= requiredAlternans)) ||
-                     (intervalHalved && (evenHigherCount >= requiredAlternans || oddHigherCount >= requiredAlternans));
-
-  if (isAlternans) {
-    bool pruneOdds = (evenHigherCount >= oddHigherCount);
-    for (int i = 0; i < inCount; ++i) {
-      bool isDicrotic = (pruneOdds && (i % 2 == 1)) || (!pruneOdds && (i % 2 == 0));
-      if (!isDicrotic) {
-        outLocs[outCount] = inLocs[i];
-        outAmps[outCount] = inAmps[i];
-        outCount++;
-      }
-    }
-  } else {
-    for (int i = 0; i < inCount; ++i) {
-      outLocs[i] = inLocs[i];
-      outAmps[i] = inAmps[i];
-    }
-    outCount = inCount;
-  }
-}
 
 void detrendSignalZeroPhase(
     const float* input,
@@ -310,86 +102,56 @@ void processPpgSignal(
     }
   }
 
-  // 4. Clinical Autocorrelation Function (ACF) to extract ground-truth fundamental period
-  int acfLag = 0;
-  float acfConf = 0.0f;
-  bool acfValid = estimateFundamentalPeriodAcf(smoothed, n, fs, acfLag, acfConf);
-
-  // 5. Elgendi Non-linear Energy Squaring to suppress dicrotic notches
-  float squared[128];
-  float maxSq = 0.0f;
-  for (size_t i = 0; i < n; ++i) {
-    if (smoothed[i] > 0.0f) {
-      squared[i] = smoothed[i] * smoothed[i];
-    } else {
-      squared[i] = 0.0f;
-    }
-    if (squared[i] > maxSq) maxSq = squared[i];
-  }
-
-  // Dynamic range & adaptive dual-threshold calculation
-  float maxVal = smoothed[0];
-  float minVal = smoothed[0];
+  // 4. Find signal maximum for adaptive threshold
+  float sigMax = smoothed[0];
   for (size_t i = 1; i < n; ++i) {
-    if (smoothed[i] > maxVal) maxVal = smoothed[i];
-    if (smoothed[i] < minVal) minVal = smoothed[i];
-  }
-  float dynamicRange = maxVal - minVal;
-  if (dynamicRange < PPG_MIN_DYNAMIC_RANGE) return; // Rejects cloth/table noise
-
-  // Dual thresholding: smoothed threshold + squared energy threshold
-  float thresholdSmoothed = minVal + (dynamicRange * 0.40f);
-  float thresholdSq = maxSq * 0.08f; // Resilient against contact-settling amplitude spikes
-
-  // 6. Dynamic physiological refractory period
-  // If prevStableHr is present, scale from it; otherwise use ACF ground truth to avoid cold-start 2x doubling!
-  int tauRefractory = 10;
-  if (prevStableHr >= 35.0f && prevStableHr <= 220.0f) {
-    float estCycleSamples = (static_cast<float>(fs) * 60.0f) / prevStableHr;
-    tauRefractory = static_cast<int>(roundf(0.48f * estCycleSamples));
-  } else if (acfValid && acfLag >= 7) {
-    tauRefractory = static_cast<int>(roundf(0.48f * static_cast<float>(acfLag)));
+    if (smoothed[i] > sigMax) sigMax = smoothed[i];
   }
 
-  int minRefractory = (prevStableHr > 140.0f || (acfValid && acfLag <= 10)) ? 5 : 7;
-  if (tauRefractory < minRefractory) tauRefractory = minRefractory;
-  if (tauRefractory > 18) tauRefractory = 18; // 720ms cap (supports down to 40 BPM)
+  // Reject flat / no-finger signals
+  if (sigMax < PPG_MIN_DYNAMIC_RANGE) return;
 
-  // 7. Systolic peak detection with dual threshold & refractory blanking
-  int rawPeakLocs[30];
-  float rawPeakAmps[30];
-  int rawNumPeaks = 0;
+  // Adaptive threshold = 50% of signal maximum.
+  // This adapts to any signal amplitude and keeps the bar above the dicrotic notch
+  // (which is typically 40-60% of systolic peak — we threshold above that).
+  const float threshold = sigMax * 0.50f;
 
-  for (size_t i = 1; i < n - 1 && rawNumPeaks < 30; ++i) {
-    if (smoothed[i] > thresholdSmoothed && squared[i] >= thresholdSq &&
-        smoothed[i] >= smoothed[i - 1] && smoothed[i] > smoothed[i + 1]) {
+  // Hard physiological refractory period: 300ms minimum = 8 samples at 25Hz.
+  // A dicrotic notch appears 200-350ms after systolic peak.
+  // 300ms refractory blocks the notch for all HR up to ~150 BPM without cutting real beats.
+  // At 200 BPM, cycle = 300ms, so 300ms is the tightest safe floor.
+  const int REFRACTORY = 8; // 320ms at 25Hz
 
-      if (rawNumPeaks > 0 && (static_cast<int>(i) - rawPeakLocs[rawNumPeaks - 1]) < tauRefractory) {
-        // Within refractory period, retain only the higher amplitude peak (systolic vs dicrotic)
-        if (smoothed[i] > rawPeakAmps[rawNumPeaks - 1]) {
-          rawPeakLocs[rawNumPeaks - 1] = static_cast<int>(i);
-          rawPeakAmps[rawNumPeaks - 1] = smoothed[i];
+  // 5. Peak detection with adaptive threshold and refractory blanking
+  int peakLocs[25];
+  float peakAmps[25];
+  int numPeaks = 0;
+
+  for (size_t i = 1; i < n - 1 && numPeaks < 25; ++i) {
+    // Local maximum above threshold
+    if (smoothed[i] > threshold &&
+        smoothed[i] >= smoothed[i - 1] &&
+        smoothed[i] > smoothed[i + 1]) {
+
+      if (numPeaks > 0 && (static_cast<int>(i) - peakLocs[numPeaks - 1]) < REFRACTORY) {
+        // Within refractory: keep only the taller peak (systolic wins over dicrotic)
+        if (smoothed[i] > peakAmps[numPeaks - 1]) {
+          peakLocs[numPeaks - 1] = static_cast<int>(i);
+          peakAmps[numPeaks - 1] = smoothed[i];
         }
       } else {
-        rawPeakLocs[rawNumPeaks] = static_cast<int>(i);
-        rawPeakAmps[rawNumPeaks] = smoothed[i];
-        rawNumPeaks++;
+        peakLocs[numPeaks] = static_cast<int>(i);
+        peakAmps[numPeaks] = smoothed[i];
+        numPeaks++;
       }
     }
   }
 
-  // 8. Bimodal Alternating Peak & Amplitude Filter (Prunes surviving dicrotic waves)
-  int peakLocs[30];
-  float peakAmps[30];
-  int numPeaks = 0;
-  pruneDicroticPeaks(rawPeakLocs, rawPeakAmps, rawNumPeaks, peakLocs, peakAmps, numPeaks, acfValid ? acfLag : 0);
-
-  // 9. Calculate Heart Rate from verified inter-beat intervals
+  // 6. Calculate HR from inter-beat intervals (IBI)
   float candidateBpm = 0.0f;
   bool candidateHrFound = false;
 
   if (numPeaks >= 2) {
-    int intervals[30];
     int validIntervals = 0;
     int minInt = 999;
     int maxInt = 0;
@@ -397,9 +159,8 @@ void processPpgSignal(
 
     for (int i = 1; i < numPeaks; ++i) {
       int diff = peakLocs[i] - peakLocs[i - 1];
-      // Physiological bounds: 7 samples (214 BPM) to 43 samples (35 BPM)
-      if (diff >= 7 && diff <= 43) {
-        intervals[validIntervals] = diff;
+      // Physiological bounds: 8 samples (187 BPM, matches REFRACTORY) to 50 samples (30 BPM)
+      if (diff >= REFRACTORY && diff <= 50) {
         intervalSum += static_cast<float>(diff);
         if (diff < minInt) minInt = diff;
         if (diff > maxInt) maxInt = diff;
@@ -411,26 +172,12 @@ void processPpgSignal(
       float avgInterval = intervalSum / static_cast<float>(validIntervals);
       float calculatedBpm = (static_cast<float>(fs) * 60.0f) / avgInterval;
 
-      // ISO 80601-2-61: Signal Quality Index (SQI) check on interval regularity (RR Jitter).
-      // If motion/pressure artifact corrupted the rhythm, intervals will vary widely (> 22%).
+      // RR Jitter check: 40% tolerance covers normal HRV and RSA
       bool rhythmConsistent = true;
       if (validIntervals >= 2) {
         float jitter = static_cast<float>(maxInt - minInt) / avgInterval;
-        if (jitter > 0.22f) {
+        if (jitter > 0.40f) {
           rhythmConsistent = false;
-        }
-      } else if (validIntervals == 1) {
-        // With only 1 interval, require verification by ACF fundamental lag within +/- 18%
-        if (!acfValid || fabsf(static_cast<float>(intervals[0]) - static_cast<float>(acfLag)) > (0.18f * static_cast<float>(acfLag))) {
-          rhythmConsistent = false;
-        }
-      }
-
-      // Cross-verify with ACF fundamental rate to guarantee immunity against 2x doubling (only for tachycardia)
-      if (acfValid && acfLag >= 7) {
-        float acfBpm = (static_cast<float>(fs) * 60.0f) / static_cast<float>(acfLag);
-        if (calculatedBpm >= 100.0f && calculatedBpm >= 1.75f * acfBpm && calculatedBpm <= 2.25f * acfBpm) {
-          calculatedBpm = calculatedBpm / 2.0f;
         }
       }
 

@@ -248,7 +248,7 @@ void PpgSensorManager::update() {
             }
 
             // -----------------------------------------------------------------
-            // 3. State-of-the-Art Biometric Extraction
+            // 3. Biometric Extraction via processPpgSignal (dsp_filters.cpp)
             // -----------------------------------------------------------------
             int32_t rawSpo2 = 0;
             bool validSpo2 = false;
@@ -267,26 +267,21 @@ void PpgSensorManager::update() {
             );
 
             data_.hr_bpm_raw = rawHr;
-            data_.spo2_raw = rawSpo2;
+            data_.spo2_raw   = rawSpo2;
             data_.perfusion_index = validPi ? rawPi : calculatePerfusionIndex(irBuffer_, BUFFER_SIZE);
             data_.signal_quality_ok = (data_.perfusion_index >= MIN_PERFUSION_INDEX);
 
             // -----------------------------------------------------------------
-            // 4. Heart Rate Post-Processing (Anti-Harmonic + Median + EMA + Holdover)
+            // 4. Heart Rate: validate and apply rolling median
             // -----------------------------------------------------------------
             if (validHr && rawHr >= HR_MIN_BPM && rawHr <= HR_MAX_BPM && data_.signal_quality_ok) {
-              float correctedHr = filterHarmonics(static_cast<float>(rawHr), lastStableHr_, HARMONIC_TOLERANCE);
-
-              hrMedian_.add(correctedHr);
+              hrMedian_.add(static_cast<float>(rawHr));
               float medianHr = hrMedian_.getMedian();
-
-              float smoothHr = hrEma_.update(medianHr);
-              data_.hr_bpm = static_cast<int32_t>(roundf(smoothHr));
+              data_.hr_bpm = static_cast<int32_t>(roundf(medianHr));
               data_.hr_valid = true;
-              lastStableHr_ = smoothHr;
+              lastStableHr_ = medianHr;
               lastValidHrMs_ = now;
             } else {
-              // Clinical holdover: retain last confirmed valid rate for up to 3 seconds during momentary noise
               if (lastValidHrMs_ > 0 && (now - lastValidHrMs_ <= BIOMETRIC_HOLDOVER_MS)) {
                 data_.hr_valid = true;
               } else {
@@ -295,18 +290,16 @@ void PpgSensorManager::update() {
             }
 
             // -----------------------------------------------------------------
-            // 5. SpO2 Post-Processing (Median + EMA + Holdover)
+            // 5. SpO2: validate and apply rolling median
             // -----------------------------------------------------------------
             if (validSpo2 && rawSpo2 >= SPO2_MIN_PCT && rawSpo2 <= SPO2_MAX_PCT && data_.signal_quality_ok) {
               spo2Median_.add(static_cast<float>(rawSpo2));
               float medianSpo2 = spo2Median_.getMedian();
               float smoothSpo2 = spo2Ema_.update(medianSpo2);
-
               data_.spo2 = static_cast<int32_t>(roundf(smoothSpo2));
               data_.spo2_valid = true;
               lastValidSpo2Ms_ = now;
             } else {
-              // Clinical holdover: retain last confirmed valid SpO2 for up to 3 seconds during momentary noise
               if (lastValidSpo2Ms_ > 0 && (now - lastValidSpo2Ms_ <= BIOMETRIC_HOLDOVER_MS)) {
                 data_.spo2_valid = true;
               } else {
@@ -315,13 +308,13 @@ void PpgSensorManager::update() {
             }
 
             // -----------------------------------------------------------------
-            // 6. Sliding Window Step (25 samples shift = 1 second)
+            // 6. Sliding Window Step (25 samples = 1 second)
             // -----------------------------------------------------------------
             for (size_t i = PPG_SHIFT_SAMPLES; i < BUFFER_SIZE; ++i) {
               redBuffer_[i - PPG_SHIFT_SAMPLES] = redBuffer_[i];
-              irBuffer_[i - PPG_SHIFT_SAMPLES] = irBuffer_[i];
+              irBuffer_[i - PPG_SHIFT_SAMPLES]  = irBuffer_[i];
             }
-            sampleCount_ = BUFFER_SIZE - PPG_SHIFT_SAMPLES; // 75
+            sampleCount_ = BUFFER_SIZE - PPG_SHIFT_SAMPLES;
           }
         }
       }

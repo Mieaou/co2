@@ -132,65 +132,6 @@ private:
   bool initialized_;
 };
 
-/**
- * @brief Rejects dicrotic notch doubling harmonics.
- * 
- * In photoplethysmography (PPG), secondary dicrotic waves often cause the peak 
- * detector to trigger twice per heartbeat, doubling the reported rate (e.g. 68 -> 136).
- * This function detects if the current value is an exact 2x harmonic of the previous
- * stable heart rate and corrects it by halving back to fundamental rate.
- * 
- * @param currentVal Current raw instantaneous value from the peak detector.
- * @param prevStableVal Last confirmed stable value.
- * @param tolerance Allowable deviation band around 2.0x (e.g. 0.15 = 15%).
- * @return Harmonic-corrected value.
- */
-float filterHarmonics(float currentVal, float prevStableVal, float tolerance = 0.15f);
-
-/**
- * @brief Computes normalized autocorrelation (ACF) to extract true fundamental cardiac period.
- * 
- * Clinical pulse oximetry technique to guarantee rejection of dicrotic notch harmonics (2x doubling)
- * even on cold-start (first touch) without prior history.
- * 
- * @param signal Pointer to zero-mean smoothed AC signal.
- * @param length Number of samples.
- * @param fs Sampling rate in Hz.
- * @param outFundamentalLag Output estimated period in samples (tau).
- * @param outConfidence Output ACF peak correlation coefficient (0.0 to 1.0).
- * @return True if a valid periodic cardiac component was identified.
- */
-bool estimateFundamentalPeriodAcf(
-    const float* signal,
-    size_t length,
-    int fs,
-    int& outFundamentalLag,
-    float& outConfidence);
-
-/**
- * @brief Rejects secondary dicrotic notch reflections based on bimodal interval & amplitude alternans.
- * 
- * In photoplethysmography with prominent dicrotic wave, detected peaks alternate:
- * Systolic (high amp) -> Dicrotic (lower amp) -> Systolic -> Dicrotic.
- * Intervals alternate: T1 (short) -> T2 (longer).
- * This function detects this physiological alternans pattern and prunes secondary dicrotic peaks.
- * 
- * @param inLocs Input peak indices.
- * @param inAmps Input peak amplitudes.
- * @param inCount Input number of peaks.
- * @param outLocs Output filtered peak indices.
- * @param outAmps Output filtered peak amplitudes.
- * @param outCount Output filtered peak count.
- * @param expectedLag Fundamental cycle period (e.g. from ACF or prior HR), 0 if unknown.
- */
-void pruneDicroticPeaks(
-    const int* inLocs,
-    const float* inAmps,
-    int inCount,
-    int* outLocs,
-    float* outAmps,
-    int& outCount,
-    int expectedLag = 0);
 
 /**
  * @brief Removes low-frequency baseline wander and contact pressure ramps using zero-phase moving average.
@@ -211,15 +152,16 @@ void detrendSignalZeroPhase(
     int windowRadius = 10);
 
 /**
- * @brief State-of-the-art PPG peak detection, heart rate calculation, and SpO2 extraction.
+ * @brief PPG signal processing: heart rate detection and SpO2 extraction.
  * 
  * Implements:
- * - Zero-phase symmetric smoothing FIR filter
- * - Dynamic physiological refractory period tied to instantaneous heart rate
- * - Adaptive peak thresholding for dicrotic notch suppression
- * - Cardiac cycle linear baseline detrending (Maxim AN6845)
- * - Cycle-by-cycle R-ratio extraction with median selection for SpO2
- * - True pulsatile Perfusion Index (PI %) across confirmed beats
+ * - Zero-phase baseline detrending (removes pressure ramps and DC drift)
+ * - Zero-phase symmetric 5-point FIR smoothing
+ * - Adaptive threshold peak detection (50% of signal maximum)
+ * - Hard 320ms refractory period to suppress dicrotic notch
+ * - IBI-based HR with RR jitter validation
+ * - Cycle-by-cycle R-ratio extraction with median selection for SpO2 (Maxim AN6845)
+ * - True pulsatile Perfusion Index (PI %)
  * 
  * @param irBuffer Pointer to raw IR ADC samples.
  * @param redBuffer Pointer to raw Red ADC samples.

@@ -150,7 +150,8 @@ constexpr size_t PPG_SHIFT_SAMPLES = 25;
 constexpr size_t MEDIAN_WINDOW_SIZE = 5;
 
 /// Exponential Moving Average (EMA) smoothing coefficient for Heart Rate (0.0 - 1.0)
-constexpr float HR_EMA_ALPHA = 0.25f;
+/// Higher alpha = faster response, less drift accumulation from bad readings
+constexpr float HR_EMA_ALPHA = 0.45f;
 
 /// Exponential Moving Average (EMA) smoothing coefficient for SpO2 (0.0 - 1.0)
 constexpr float SPO2_EMA_ALPHA = 0.20f;
@@ -159,7 +160,7 @@ constexpr float SPO2_EMA_ALPHA = 0.20f;
 constexpr float HARMONIC_TOLERANCE = 0.15f;
 
 /// Physiological bounds for heart rate (beats per minute)
-constexpr int32_t HR_MIN_BPM = 35;
+constexpr int32_t HR_MIN_BPM = 30;
 constexpr int32_t HR_MAX_BPM = 220;
 
 /// Physiological bounds for blood oxygen saturation (percentage)
