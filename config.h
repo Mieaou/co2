@@ -171,10 +171,10 @@ constexpr int32_t SPO2_MAX_PCT = 100;
 constexpr float MIN_PERFUSION_INDEX = 0.15f;
 
 /// Minimum peak-to-peak AC amplitude (counts) to differentiate living pulsatile tissue from static cloth/bed noise
-constexpr float PPG_MIN_DYNAMIC_RANGE = 400.0f;
+constexpr float PPG_MIN_DYNAMIC_RANGE = 200.0f;
 
 /// Minimum cardiac cycle AC amplitude for IR and Red channels
-constexpr float PPG_MIN_AC_AMPLITUDE_IR = 200.0f;
-constexpr float PPG_MIN_AC_AMPLITUDE_RED = 100.0f;
+constexpr float PPG_MIN_AC_AMPLITUDE_IR = 80.0f;
+constexpr float PPG_MIN_AC_AMPLITUDE_RED = 40.0f;
 
 #endif // CONFIG_H
