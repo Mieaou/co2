@@ -338,6 +338,12 @@ function renderTelemetry(data) {
 
     elSpo2.textContent = "--";
     elSpo2.classList.remove("stale-value");
+
+    const elPi = document.getElementById("valPi");
+    if (elPi) {
+      elPi.textContent = "--";
+      elPi.classList.remove("stale-value");
+    }
   } else if (data.hr_valid && data.hr_bpm > 0) {
     // 3. Pulse valid: beating red heart, show number
     isHrValid = true;
@@ -367,6 +373,17 @@ function renderTelemetry(data) {
       elSpo2.textContent = "--";
       elSpo2.classList.remove("stale-value");
     }
+
+    const elPi = document.getElementById("valPi");
+    if (elPi) {
+      if (data.hr_valid && data.perfusion_index > 0) {
+        elPi.textContent = data.perfusion_index.toFixed(1);
+        elPi.classList.remove("stale-value");
+      } else {
+        elPi.textContent = "--";
+        elPi.classList.add("stale-value");
+      }
+    }
   } else {
     // Finger is present, but no valid BPM at this moment
     isHrValid = false;
@@ -392,6 +409,12 @@ function renderTelemetry(data) {
       elHeartRate.classList.remove("stale-value");
       elSpo2.textContent = "--";
       elSpo2.classList.remove("stale-value");
+    }
+    
+    const elPi = document.getElementById("valPi");
+    if (elPi) {
+      elPi.textContent = "--";
+      elPi.classList.remove("stale-value");
     }
   }
 
