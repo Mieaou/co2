@@ -89,13 +89,17 @@ void ClimateSensorManager::update(unsigned long currentMillis) {
         if (fabsf(data_.pressure_hpa - lastPressureCompHpa_) >= 1.0f || 
             (currentMillis - lastPressureCompMs_ >= 30000) || 
             lastPressureCompMs_ == 0) {
-          lastPressureCompHpa_ = data_.pressure_hpa;
-          lastPressureCompMs_ = currentMillis;
-
           // Sensirion SCD41 valid ambient pressure range: 70,000 to 120,000 Pa (700 to 1200 hPa)
           uint32_t pressPa = static_cast<uint32_t>(bmp388_.pressure);
           if (pressPa >= 70000 && pressPa <= 120000) {
-            scd4x_.setAmbientPressure(pressPa);
+            int16_t err = scd4x_.setAmbientPressure(pressPa);
+            if (err == 0) {
+              lastPressureCompHpa_ = data_.pressure_hpa;
+              lastPressureCompMs_ = currentMillis;
+            } else {
+              // On transient I2C bus error, retry in 2 seconds instead of locking out for 30s
+              lastPressureCompMs_ = (currentMillis > 28000) ? (currentMillis - 28000) : 1;
+            }
           }
         }
       }

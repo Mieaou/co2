@@ -2,6 +2,8 @@
 
 PpgSensorManager::PpgSensorManager()
   : online_(false),
+    stateChanged_(false),
+    touchStartMs_(0),
     sampleCount_(0),
     currentLedBrightness_(PPG_LED_BRIGHTNESS_DEFAULT),
     lastStableHr_(0.0f),
@@ -109,6 +111,7 @@ void PpgSensorManager::handleAgcTracking(uint32_t currentIr, unsigned long nowMs
       sampleCount_ = 0;
       agcStableCount_ = 0;
       outOfRangeStartMs_ = 0;
+      touchStartMs_ = nowMs; // Enforce settling window upon recalibration
     }
   } else {
     outOfRangeStartMs_ = 0;
@@ -116,6 +119,7 @@ void PpgSensorManager::handleAgcTracking(uint32_t currentIr, unsigned long nowMs
 }
 
 void PpgSensorManager::resetBiometrics() {
+  bool wasDetected = data_.finger_detected;
   data_.finger_detected = false;
   data_.state = PPG_STATE_NO_FINGER;
   data_.hr_valid = false;
@@ -134,8 +138,9 @@ void PpgSensorManager::resetBiometrics() {
   agcStableCount_ = 0;
   outOfRangeStartMs_ = 0;
   fingerReleaseCounter_ = 0;
-  lastValidHrMs_ = 0;
+  lastValidHrMs_ = 0; // Immediate wipe: NO HOLDOVER ON FINGER RELEASE!
   lastValidSpo2Ms_ = 0;
+  touchStartMs_ = 0;
 
   hrMedian_.reset();
   spo2Median_.reset();
@@ -147,6 +152,10 @@ void PpgSensorManager::resetBiometrics() {
     sensor_.setPulseAmplitudeRed(currentLedBrightness_);
     sensor_.setPulseAmplitudeIR(currentLedBrightness_);
     data_.led_brightness = currentLedBrightness_;
+  }
+
+  if (wasDetected) {
+    stateChanged_ = true; // Trigger immediate event-driven broadcast!
   }
 }
 
@@ -178,6 +187,8 @@ void PpgSensorManager::update() {
         agcStableCount_ = 0;
         lastAgcAdjustMs_ = 0;
         outOfRangeStartMs_ = 0;
+        touchStartMs_ = now;
+        stateChanged_ = true; // Trigger immediate event-driven broadcast!
       }
     } else if (ir < PPG_FINGER_RELEASE_THRESHOLD) {
       // Signal dropped below release threshold: debounce
@@ -200,11 +211,14 @@ void PpgSensorManager::update() {
       // -----------------------------------------------------------------------
       if (data_.state == PPG_STATE_CALIBRATING) {
         bool locked = handleAgcCalibration(ir, red, now);
-        if (locked) {
-          // AGC gain locked: switch cleanly to acquiring state with empty buffer
+        // ISO 80601-2-61: Require BOTH AGC lock AND contact settling window (>= 1000ms)
+        // This eliminates transient contact-squeeze artifacts (e.g. spurious 95 BPM)
+        if (locked && (now - touchStartMs_ >= 1000)) {
+          // AGC gain locked and contact settled: switch cleanly to acquiring state with empty buffer
           data_.state = PPG_STATE_ACQUIRING;
           data_.buffer_progress_pct = 0;
           sampleCount_ = 0;
+          stateChanged_ = true;
         }
       } else if (data_.state == PPG_STATE_ACQUIRING || data_.state == PPG_STATE_TRACKING) {
         if (data_.state == PPG_STATE_TRACKING) {
@@ -226,8 +240,12 @@ void PpgSensorManager::update() {
 
           // When buffer capacity is reached (100 samples = 4 seconds)
           if (sampleCount_ >= BUFFER_SIZE) {
+            bool wasAcquiring = (data_.state == PPG_STATE_ACQUIRING);
             data_.state = PPG_STATE_TRACKING;
             data_.buffer_progress_pct = 100;
+            if (wasAcquiring) {
+              stateChanged_ = true; // Trigger immediate event-driven broadcast on initial lock!
+            }
 
             // -----------------------------------------------------------------
             // 3. State-of-the-Art Biometric Extraction

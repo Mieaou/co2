@@ -6,7 +6,7 @@
 #include "ble_manager.h"
 
 BleManager::BleManager() 
-  : _bledis(), _bleuart() {
+  : _bledis(), _bleuart(1024) {
 }
 
 void BleManager::begin(const char* deviceName) {

@@ -385,11 +385,17 @@ void loop() {
   // 4. Drain MAX30101 FIFO buffer and execute real-time PPG state machine
   ppg.update();
 
+  // ISO 80601-2-61: Event-driven immediate push (<100ms) on finger contact or state change
+  // Eliminates all 6-second UI display lag on finger release!
+  if (ppg.consumeStateChanged()) {
+    lastTelemetryMs = 0;
+  }
+
   // 5. Poll climate sensors and execute asynchronous data-ready tasks
   climate.update(now);
 
   // 6. Continuous periodic telemetry reporting
-  if (now - lastTelemetryMs >= TELEMETRY_INTERVAL_MS) {
+  if (lastTelemetryMs == 0 || (now - lastTelemetryMs >= TELEMETRY_INTERVAL_MS)) {
     lastTelemetryMs = now;
     
     // Output to USB Serial

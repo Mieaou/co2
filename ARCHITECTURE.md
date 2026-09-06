@@ -104,20 +104,20 @@ Normal human PPG waveforms have a **dicrotic notch** (aortic valve closure refle
 * **Adaptive Decaying Threshold:** Peak detection threshold is initialized to 42% of peak-to-peak amplitude above floor to exclude secondary wave reflections.
 * **Relative Anti-Doubling Harmonic Check:**
   $$\text{Ratio} = \frac{\text{HR}_{\text{instantaneous}}}{\text{HR}_{\text{last\_stable}}}$$
-  - Doubling harmonic check: $|\text{Ratio} - 2.0| \le 2.0 \cdot \text{tol} \implies [1.70, 2.30] \implies \text{Corrected HR} = \frac{\text{HR}_{\text{instantaneous}}}{2}$.
+  - Doubling harmonic check: Halves rate only when $\text{HR}_{\text{instantaneous}} \ge 100\text{ BPM}$ and $\text{HR}_{\text{last\_stable}} \ge 45\text{ BPM}$ within $[1.70, 2.30]$. Resting rates ($60-95$ BPM) are never halved, preventing lock-in at 35 BPM.
   - Recovery safety: Omits forced $2\times$ multiplication on $0.5\times$ drops to guarantee smooth self-recovery without harmonic lock-in.
-  (Uses relative tolerance scaling to prevent false doubling during natural cardiac deceleration).
 
 #### Rolling Median & EMA Filter Pipeline
 * **`RollingMedian<float, 5>`**: An insertion-sorted circular window of the last 5 measurements. Completely cuts out single-measurement dropouts and transient spikes.
 * **`EmaFilter` ($\alpha = 0.25$)**: Smooths physiological heart rate variability for human-readable display.
 
-#### Medical-Grade SpO2 & Perfusion Index (PI %)
+#### Medical-Grade SpO2 & Decoupled Heart Rate Validation
+* **Decoupled Optical Validation:** Heart rate validity is confirmed independently based on verified IR pulsatile SNR ($AC_{\text{IR}} \ge 60$) and rhythm regularity, ensuring stable pulse reporting even if peripheral perfusion is cold or SpO2 is calculating.
 * **Cycle-by-Cycle Linear Baseline Detrending (Maxim AN6845):** For each cardiac cycle, $AC_{\text{Red}}$ and $AC_{\text{IR}}$ are extracted relative to the local beat baseline $(max + min)/2$.
-* **Median $R$-Ratio Selection:** $R_k$ ratios are collected per beat and filtered via statistical median before calculating SpO2 ($R \in [0.15, 2.00]$ allows accurate 99-100% SpO2 detection).
+* **Median $R$-Ratio Selection:** $R_k$ ratios are collected per beat and filtered via statistical median before calculating SpO2 ($R \in [0.18, 1.85]$ allows accurate 70-100% SpO2 detection).
 * **Pulsatile Perfusion Index (PI %):**
   $$PI = \frac{\overline{AC_{\text{pulse}}}}{DC} \times 100\%$$
-  Calculated strictly across confirmed cardiac cycles, preventing false inflation from respiratory baseline wander.
+  Calculated strictly across confirmed cardiac cycles with minimum threshold $PI \ge 0.15\%$.
 
 ---
 
@@ -158,6 +158,7 @@ $$h = 44330 \cdot \left(1 - \left(\frac{P}{P_{\text{ref}}}\right)^{0.190295}\rig
 ## 5. Telemetry & Protocol Specifications
 
 ### JSON Telemetry Contract (`OUTPUT_JSON = true`)
+Emitted over USB Serial (115200 baud) and streamed via Nordic UART Service (NUS) over Bluetooth Low Energy with an expanded 1024-byte TX FIFO depth:
 ```json
 {
   "time_ms": 12450,

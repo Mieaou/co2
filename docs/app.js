@@ -360,16 +360,17 @@ function renderTelemetry(data) {
 
   // Heart Rate & SpO2 rendering
   if (!hasFinger) {
-    // 1. No finger: clear display immediately
+    // 1. No finger: no heart icon, no number
     elHeartRate.textContent = "--";
     elHeartRate.classList.remove("stale-value");
+    heartIcon.style.opacity = "0"; // Hide heart
     heartIcon.classList.remove("beating");
-    if (elHrRaw) elHrRaw.textContent = "Фильтрация гармоник /2";
+    if (elHrRaw) elHrRaw.textContent = "Нет пальца";
 
     elSpo2.textContent = "--";
     elSpo2.classList.remove("stale-value");
   } else if (data.hr_valid && data.hr_bpm > 0) {
-    // 2. Finger present and BPM is actively valid: show bright value
+    // 3. Pulse valid: beating red heart, show number
     isHrValid = true;
     currentBpm = data.hr_bpm;
     lastTouchBpm = data.hr_bpm;
@@ -379,10 +380,14 @@ function renderTelemetry(data) {
 
     elHeartRate.textContent = data.hr_bpm;
     elHeartRate.classList.remove("stale-value");
+    
+    heartIcon.style.opacity = "1";
+    heartIcon.style.color = "#ef4444"; // Red heart
     heartIcon.classList.add("beating");
+    
     const beatSec = (60 / Math.max(40, Math.min(220, data.hr_bpm))).toFixed(2);
     heartIcon.style.animationDuration = `${beatSec}s`;
-    if (elHrRaw) elHrRaw.textContent = "Пульс стабилен (фильтрация /2)";
+    if (elHrRaw) elHrRaw.textContent = "Пульс стабилен";
 
     if (data.spo2_valid && data.spo2_pct > 0) {
       elSpo2.textContent = data.spo2_pct;
@@ -395,15 +400,17 @@ function renderTelemetry(data) {
       elSpo2.classList.remove("stale-value");
     }
   } else {
-    // 3. Finger IS present, but BPM is temporarily invalid (calibrating, acquiring, or momentary noise)
+    // Finger is present, but no valid BPM at this moment
     isHrValid = false;
+    heartIcon.style.opacity = "1";
+    heartIcon.style.color = "#94a3b8"; // Grey heart
     heartIcon.classList.remove("beating");
 
     if (lastTouchBpm !== null) {
-      // Retain the old measured value in GRAY while finger remains placed
+      // 4. Recalculating: grey heart, show last valid value
       elHeartRate.textContent = lastTouchBpm;
       elHeartRate.classList.add("stale-value");
-      if (elHrRaw) elHrRaw.textContent = "Перерасчет (удержание)";
+      if (elHrRaw) elHrRaw.textContent = "Перерасчет...";
 
       if (lastTouchSpo2 !== null) {
         elSpo2.textContent = lastTouchSpo2;
@@ -413,13 +420,11 @@ function renderTelemetry(data) {
         elSpo2.classList.remove("stale-value");
       }
     } else {
-      // First touch before any calculation was completed
+      // 2. Calculating initially: grey heart, no number
       elHeartRate.textContent = "--";
       elHeartRate.classList.remove("stale-value");
       if (elHrRaw) {
-        elHrRaw.textContent = (data.ppg_state === 1) ? "Калибровка AGC..." :
-                              (data.ppg_state === 2) ? `Буфер ${data.buffer_pct || 0}%...` :
-                              "Поиск пульса...";
+        elHrRaw.textContent = "Поиск пульса...";
       }
 
       elSpo2.textContent = "--";
@@ -932,11 +937,14 @@ function resetBiometricsUi() {
     elSpo2.textContent = "--";
     elSpo2.classList.remove("stale-value");
   }
-  if (heartIcon) heartIcon.classList.remove("beating");
+  if (heartIcon) {
+    heartIcon.classList.remove("beating");
+    heartIcon.style.opacity = "0";
+  }
   if (fingerDot) fingerDot.classList.remove("active");
   if (fingerText) fingerText.textContent = "Приложите палец к сенсору";
   if (fsmBadge) fsmBadge.textContent = "FSM: Ожидание";
-  if (elHrRaw) elHrRaw.textContent = "Фильтрация гармоник /2";
+  if (elHrRaw) elHrRaw.textContent = "Нет пальца";
 }
 
 // =============================================================================

@@ -43,9 +43,21 @@ public:
   /// Check if MAX30101 is online
   bool isOnline() const { return online_; }
 
+  /**
+   * @brief Checks and consumes the state-changed flag (used for immediate event-driven telemetry push).
+   * @return True if finger contact or operational state changed since last call.
+   */
+  bool consumeStateChanged() {
+    bool changed = stateChanged_;
+    stateChanged_ = false;
+    return changed;
+  }
+
 private:
   MAX30105 sensor_;
   bool online_;
+  bool stateChanged_;
+  unsigned long touchStartMs_;
 
   uint32_t irBuffer_[BUFFER_SIZE];
   uint32_t redBuffer_[BUFFER_SIZE];

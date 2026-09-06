@@ -148,6 +148,69 @@ private:
 float filterHarmonics(float currentVal, float prevStableVal, float tolerance = 0.15f);
 
 /**
+ * @brief Computes normalized autocorrelation (ACF) to extract true fundamental cardiac period.
+ * 
+ * Clinical pulse oximetry technique to guarantee rejection of dicrotic notch harmonics (2x doubling)
+ * even on cold-start (first touch) without prior history.
+ * 
+ * @param signal Pointer to zero-mean smoothed AC signal.
+ * @param length Number of samples.
+ * @param fs Sampling rate in Hz.
+ * @param outFundamentalLag Output estimated period in samples (tau).
+ * @param outConfidence Output ACF peak correlation coefficient (0.0 to 1.0).
+ * @return True if a valid periodic cardiac component was identified.
+ */
+bool estimateFundamentalPeriodAcf(
+    const float* signal,
+    size_t length,
+    int fs,
+    int& outFundamentalLag,
+    float& outConfidence);
+
+/**
+ * @brief Rejects secondary dicrotic notch reflections based on bimodal interval & amplitude alternans.
+ * 
+ * In photoplethysmography with prominent dicrotic wave, detected peaks alternate:
+ * Systolic (high amp) -> Dicrotic (lower amp) -> Systolic -> Dicrotic.
+ * Intervals alternate: T1 (short) -> T2 (longer).
+ * This function detects this physiological alternans pattern and prunes secondary dicrotic peaks.
+ * 
+ * @param inLocs Input peak indices.
+ * @param inAmps Input peak amplitudes.
+ * @param inCount Input number of peaks.
+ * @param outLocs Output filtered peak indices.
+ * @param outAmps Output filtered peak amplitudes.
+ * @param outCount Output filtered peak count.
+ * @param expectedLag Fundamental cycle period (e.g. from ACF or prior HR), 0 if unknown.
+ */
+void pruneDicroticPeaks(
+    const int* inLocs,
+    const float* inAmps,
+    int inCount,
+    int* outLocs,
+    float* outAmps,
+    int& outCount,
+    int expectedLag = 0);
+
+/**
+ * @brief Removes low-frequency baseline wander and contact pressure ramps using zero-phase moving average.
+ * 
+ * Isolates pure pulsatile cardiac AC waveform (0.6 - 4.0 Hz).
+ * Mathematically annihilates linear trends (x - MA(x) = 0), preventing
+ * Autocorrelation (ACF) and peak detectors from latching onto contact ramps (36 BPM artifact).
+ * 
+ * @param input Raw or DC-subtracted optical signal.
+ * @param output Destination buffer for detrended AC signal.
+ * @param length Number of samples.
+ * @param windowRadius Half-window size (e.g. 10 samples -> 21 samples total = 0.84s at 25Hz).
+ */
+void detrendSignalZeroPhase(
+    const float* input,
+    float* output,
+    size_t length,
+    int windowRadius = 10);
+
+/**
  * @brief State-of-the-art PPG peak detection, heart rate calculation, and SpO2 extraction.
  * 
  * Implements:
